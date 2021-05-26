@@ -13,21 +13,25 @@ outputDir =  '/home/timb/data/CSC'
 n_atoms = 25
 subjectID = 'CC120065'
 sensorType = 'grad'
+atomDuration = 0.5 # seconds
 
-preStimStart = 0  # -1.7 seconds wrt cue
-activeStart = 255 # 0 seconds wrt cue
-zWindowDuration = 75	# 0.5 seconds
+preStimStartTime = 0    # [seconds from start of trial, i.e., -1.7 seconds wrt cue]
+activeStartTime = 1.7   # [seconds from start of trial
+zWindowDurationTime = 0.5   # seconds
 
 subjectOutputDir = os.path.join(outputDir, subjectID)
 
 # Load in the CSC results
 megFile = os.path.join(inputDir, subjectID, 'transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif')
-outputFile = os.path.join(subjectOutputDir, 'CSCepochs_' 
+outputFile = os.path.join(subjectOutputDir, 'CSCepochs_' + str(int(atomDuration*1000)) + 'ms_'
         +sensorType  + str(n_atoms) + 'atoms.pkl')
 cdl, info = pickle.load(open(outputFile, "rb"))
 
 sfreq = info['sfreq']
 
+preStimStart = int(np.round(preStimStartTime*sfreq)) 
+activeStart = int(np.round(activeStartTime*sfreq)) 
+zWindowDuration = int(np.round(zWindowDurationTime*sfreq))
 
 # Plot time course for all atoms
 fig, axes = plt.subplots(5, 5, sharex=True, sharey=True)
@@ -83,4 +87,3 @@ plt.figure()
 plt.bar(x=range(25), height=tstat) 
 plt.grid(True)
 plt.show()
-

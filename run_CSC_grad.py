@@ -15,7 +15,7 @@ n_atoms = 25                        # Number of atoms
 atomDuration = 0.5 # [seconds]      # Atom duration
 sfreq = 300.                        # Resample MEG data to this rate for CSC analysis
 sensorType = 'grad'                 # Use this sensor type for CSC analysis
-subjectID = 'CC120065'              # Subject to analyse
+subjectID = 'CC620264'              # Subject to analyse
  
 # Paths
 inputDir = '/home/timb/data/camcan/proc_data/TaskSensorAnalysis_transdef'
@@ -41,7 +41,8 @@ epochs.pick_types(meg=sensorType)
 
 # Band-pass filter the data to a range of interest
 epochsBandPass = epochs.filter(l_freq =2 , h_freq=45)
-# Skip notch filter to remove 50 Hz power line noise since LP filter is at 45 Hz
+
+# SKIP: notch filter to remove 50 Hz power line noise since LP filter is at 45 Hz
 #epochsNotch = epochsBandPass.filter(l_freq=48, h_freq=52)
 epochsNotch = epochsBandPass
 

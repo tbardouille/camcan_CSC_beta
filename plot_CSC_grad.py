@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 
 import mne
 
+# if True, use the epoched data file, if False, use ful length data
+make_epoch = False
+
 # Paths
 homeDir = Path(os.path.expanduser("~"))
 inputDir = homeDir / 'data/camcan/proc_data/TaskSensorAnalysis_transdef'
@@ -29,10 +32,19 @@ zWindowDurationTime = 0.5   # in seconds
 subjectOutputDir = outputDir / subjectID
 
 # Load in the CSC results
-megFile = inputDir / subjectID / \
-    'transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif'
+fifName = 'transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_'
+if make_epoch:
+    fifName += 'cleaned-epo.fif'
+else:
+    fifName += 'cleaned-raw.fif'
+megFile = inputDir / subjectID / fifName
 
-pkl_name = 'CSCepochs_' + str(int(atomDuration*1000)) + \
+
+if make_epoch:
+    pkl_name = 'CSCepochs_'
+else:
+    pkl_name = 'CSCraw_'
+pkl_name += str(int(atomDuration*1000)) + \
     'ms_' + sensorType + str(n_atoms) + 'atoms.pkl'
 outputFile = subjectOutputDir / pkl_name
 

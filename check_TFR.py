@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+# %%
 # Import libraries
 import os
 from pathlib import Path
@@ -64,3 +65,5 @@ power, epochs_clean = MEG_preproc('CC620264')
 
 # Plot the result, and make sure they have a nice beta suppression
 power.plot()
+
+# %%

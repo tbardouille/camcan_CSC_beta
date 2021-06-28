@@ -13,6 +13,10 @@ import mne
 from alphacsc import BatchCDL
 
 ###############################################################################
+
+# if True, use the epoched data file, if False, use ful length data
+make_epoch = False
+
 # Important variables
 # Define the shape of the dictionary
 n_atoms = 25                        # Number of atoms
@@ -41,7 +45,11 @@ if not subjectOutputDir.exists():
 # Read in an MEG dataset with ~60 trials
 
 print('Reading MEG Data')
-fifName = 'transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif'
+fifName = 'transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_'
+if make_epoch:
+    fifName += 'cleaned-epo.fif'
+else:
+    fifName += 'cleaned-raw.fif'
 megFile = subjectInputDir / fifName
 
 if not megFile.exists():

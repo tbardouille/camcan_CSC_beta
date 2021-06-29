@@ -57,29 +57,34 @@ class StreamToLogger(object):
             self.logger.log(self.log_level, line.rstrip())
 
 
-def MEG_preproc(subjectID, make_epoch=True):
+def MEG_preproc(subjectID, maxwell_filter=False):
     """
 
     Parameters
     ----------
     subjectID : str
 
-    make_epoch : bool
-        if True, data is epoched to 3.4 s centred on the button press
+    maxwell_filter : bool
+        if True, apply a Maxwell filter
+        default is False (as Tim's file is pre-filtered)
 
     """
 
     # Script to create processed data for Motor blocks
     homeDir = Path(os.path.expanduser("~"))
-    dataDir = homeDir / 'camcan/'
-    behaviouralDir = dataDir / 'behaviouralData/'
-    megDir = dataDir / 'megData_moveComp/'
-    outDir = dataDir / 'proc_data/TaskSensorAnalysis_transdef/'
+    dataDir = homeDir / 'camcan'
+    behaviouralDir = dataDir / 'behaviouralData'
+    megDir = dataDir / 'megData_moveComp'
+    outDir = dataDir / 'proc_data' / 'TaskSensorAnalysis_transdef'
     dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
-    demographicFile = dataDir / 'proc_data/demographics_goodSubjects.csv'
+    demographicFile = dataDir / 'proc_data' / 'demographics_goodSubjects.csv'
     # create folders
     for pathDir in [behaviouralDir, megDir, outDir]:
         pathDir.mkdir(parents=True, exist_ok=True)
+
+    # Path to cross talk and calibration files for Maxwell filter
+    ctSparseFile = dataDir / 'Cam-CAN_ct_sparse.fif'
+    sssCalFile = dataDir / 'Cam-CAN_sss_cal.dat'
 
     plotOK = 0
 
@@ -95,9 +100,12 @@ def MEG_preproc(subjectID, make_epoch=True):
     tsssFifDir = megDir / str(subjectID) / 'task'
     if not tsssFifDir.exists():
         tsssFifDir.mkdir(parents=True)
-    # tsssFifName = dsPrefix + '.fif'
-    tsssFifName = 'sub-' + str(subjectID) + '_ses-passive_task-passive_meg.fif'
-    # tsssFifName = 'passive_raw.fif'
+
+    if maxwell_filter:
+        tsssFifName = 'sub-' + str(subjectID) + '_ses-smt_task-smt_meg.fif'
+    else:
+        tsssFifName = dsPrefix + '.fif'
+
     tsssFif = tsssFifDir / tsssFifName
     if not tsssFif.exists():
         sys.exit("Put %s file into %s folder." % (tsssFifName, tsssFifDir))
@@ -110,14 +118,14 @@ def MEG_preproc(subjectID, make_epoch=True):
     eveFif_all = subjectOutDir / (dsPrefix + '-eve.fif')
     eveFif_button = subjectOutDir / \
         (dsPrefix + '_Under2SecResponseOnly-eve.fif')
-    if make_epoch:
-        epochFif = subjectOutDir / \
-            (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif')
-        evokedFif = subjectOutDir / \
-            (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo-ave.fif')
-    else:
-        rawCleanFif = subjectOutDir / \
-            (dsPrefix + '_buttonPress_duration=3.4s_cleaned-raw.fif')
+    # file with epochs
+    epochFif = subjectOutDir / \
+        (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif')
+    evokedFif = subjectOutDir / \
+        (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo-ave.fif')
+    # file for raw data
+    rawCleanFif = subjectOutDir / \
+        (dsPrefix + '_buttonPress_duration=3.4s_cleaned-raw.fif')
 
     # Setup log file for standarda output and error
     logFile = subjectOutDir / (dsPrefix + '_processing_notes.txt')
@@ -137,10 +145,13 @@ def MEG_preproc(subjectID, make_epoch=True):
     print(str(subjectID))
 
     # Read raw data
-    # raw = mne.io.Raw(tsssFif, preload=True)
     raw = mne.io.read_raw_fif(tsssFif, preload=True)
     raw.filter(l_freq=None, h_freq=125)
     raw.notch_filter([50, 100])
+    if maxwell_filter:
+        raw = mne.preprocessing.maxwell_filter(raw, calibration=sssCalFile,
+                                               cross_talk=ctSparseFile,
+                                               st_duration=10.0)
 
     # Find button presses to stimuli
     evs = mne.find_events(raw, 'STI101', shortest_event=1)
@@ -212,11 +223,10 @@ def MEG_preproc(subjectID, make_epoch=True):
     else:
         print("No button event found.")
 
-    if make_epoch:
-        # Epoch data based on buttone press
-        epochs = mne.Epochs(raw, np.array(goodButtonEvents), None, prestim,
-                            poststim, baseline=(baseStart, baseEnd),
-                            verbose=False, preload=True)
+    # Epoch data based on buttone press
+    epochs = mne.Epochs(raw, np.array(goodButtonEvents), None, prestim,
+                        poststim, baseline=(baseStart, baseEnd),
+                        verbose=False, preload=True)
 
     # Load or generate ICA decomposition for this dataset
     # performs ICA on data to remove artifacts according to rejection criteria
@@ -229,10 +239,7 @@ def MEG_preproc(subjectID, make_epoch=True):
         picks = mne.pick_types(raw.info, meg=True, eeg=False, eog=True,
                                stim=False, exclude='bads')
         ica = ICA(n_components=0.99, method='fastica')
-        # ica.fit(raw, picks=picks, reject=reject)
-        # When run with reject dict, got: "No clean segment found. Please
-        # consider updating your rejection thresholds."
-        ica.fit(raw, picks=picks)
+        ica.fit(raw, picks=picks, reject=reject)
 
         n_max_ecg, n_max_eog = 3, 3
 
@@ -253,29 +260,25 @@ def MEG_preproc(subjectID, make_epoch=True):
         ecg_inds, scores = ica.find_bads_ecg(ecg_epochs, method='ctps')
         ecg_inds = ecg_inds[:n_max_ecg]
         ica.exclude.extend(ecg_inds)
-
         # save ICA file
         ica.save(icaFif)
 
-    if make_epoch:
-        # Apply ICA to epoched data	and save
-        epochs_clean = epochs.copy()
-        ica.apply(epochs_clean, exclude=ica.exclude)
-        epochs_clean.save(epochFif)
+    # Apply ICA to epoched data	and save
+    epochs_clean = epochs.copy()
+    ica.apply(epochs_clean, exclude=ica.exclude)
+    epochs_clean.save(epochFif, overwrite=True)
+    # Average and save
+    evoked = epochs_clean.average()
+    evoked.save(evokedFif, overwrite=True)
+    # Print some info
+    print(str(subjectID))
+    print(str(len(epochs)))
+    print(str(len(ica.exclude)))
 
-        # Average and save
-        evoked = epochs_clean.average()
-        evoked.save(evokedFif)
-
-        print(str(subjectID))
-        print(str(len(epochs)))
-        print(str(len(ica.exclude)))
-
-    else:
-        # Apply ICA to raw data	and save
-        raw_clean = raw.copy()
-        ica.apply(raw_clean, exclude=ica.exclude)
-        raw_clean.save(rawCleanFif, overwrite=True)
+    # Apply ICA to raw data	and save
+    raw_clean = raw.copy()
+    ica.apply(raw_clean, exclude=ica.exclude)
+    raw_clean.save(rawCleanFif, overwrite=True)
 
     return 0
 
@@ -284,7 +287,7 @@ if __name__ == '__main__':
 
     # # Check number of subjects to be worked with
     # homeDir = Path(os.path.expanduser("~"))
-    # goodSubjectsDir = homeDir / 'camcan/proc_data'
+    # goodSubjectsDir = homeDir / 'camcan' / 'proc_data'
     # if not goodSubjectsDir.exists():
     #     goodSubjectsDir.mkdir(parents=True)
 
@@ -305,5 +308,5 @@ if __name__ == '__main__':
     # # Run the jobs
     # pool.map(MEG_preproc, subjectIDs)
 
-    MEG_preproc('CC620264', make_epoch=False)
+    MEG_preproc('CC620264', maxwell_filter=True)
     # MEG_preproc('CC620262')

@@ -35,10 +35,11 @@ subjectID = 'CC620264'              # Subject to analyse
 n_times_atom = int(np.round(atomDuration * sfreq))
 
 # Paths
-homeDir = Path(os.path.expanduser("~"))
+# homeDir = Path(os.path.expanduser("~"))
+homeDir = Path.home()
 # inputDir = homeDir / 'data/camcan/proc_data/TaskSensorAnalysis_transdef'
 # same path that the one in camcam_process_to_evoked_parallel.py
-inputDir = homeDir / 'camcan/proc_data/TaskSensorAnalysis_transdef'
+inputDir = homeDir / 'camcan' / 'proc_data' / 'TaskSensorAnalysis_transdef'
 outputDir = homeDir / 'data/CSC'
 
 # Create folders

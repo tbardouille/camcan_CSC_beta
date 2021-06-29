@@ -15,8 +15,10 @@ import mne
 make_epoch = False
 
 # Paths
-homeDir = Path(os.path.expanduser("~"))
-inputDir = homeDir / 'data/camcan/proc_data/TaskSensorAnalysis_transdef'
+# homeDir = Path(os.path.expanduser("~"))
+homeDir = Path.home()
+inputDir = homeDir / 'data' / 'camcan' / \
+    ' proc_data' / 'TaskSensorAnalysis_transdef'
 outputDir = homeDir / 'data/CSC'
 
 n_atoms = 25

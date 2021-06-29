@@ -18,7 +18,8 @@ from mne.time_frequency import tfr_morlet
 def MEG_preproc(subjectID):
 
     # Script to create processed data for Motor blocks
-    homeDir = Path(os.path.expanduser("~"))
+    # homeDir = Path(os.path.expanduser("~"))
+    homeDir = Path.home()
     dataDir = homeDir / 'camcan'
     outDir = dataDir / 'proc_data' / 'TaskSensorAnalysis_transdef'
     dsPrefix = 'transdef_transrest_mf2pt2_task_raw'

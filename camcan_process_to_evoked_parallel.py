@@ -71,7 +71,8 @@ def MEG_preproc(subjectID, maxwell_filter=False):
     """
 
     # Script to create processed data for Motor blocks
-    homeDir = Path(os.path.expanduser("~"))
+    # homeDir = Path(os.path.expanduser("~"))
+    homeDir = Path.home()
     dataDir = homeDir / 'camcan'
     behaviouralDir = dataDir / 'behaviouralData'
     megDir = dataDir / 'megData_moveComp'

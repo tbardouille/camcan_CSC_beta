@@ -219,6 +219,8 @@ def MEG_preproc(subjectID, maxwell_filter=False):
 
         # Write out event files for all stimuli/responses and "good" button
         # presses only
+        # evs[:, 0] -= raw.first_samp
+        # goodButtonEvents[:, 0] -= raw.first_samp
         mne.write_events(eveFif_all, evs)
         mne.write_events(eveFif_button, goodButtonEvents)
     else:

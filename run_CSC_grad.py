@@ -49,7 +49,7 @@ def run_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
 
     Returns
     -------
-    None
+    no returns
 
     """
 
@@ -114,6 +114,7 @@ def run_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         Y /= np.std(Y)
     else:
         raw = mne.io.read_raw_fif(megFile, preload=True)
+        raw.pick_types(meg=sensorType, stim=True)
 
         # Band-pass filter the data to a range of interest
         raw.filter(l_freq=2, h_freq=45)
@@ -127,10 +128,13 @@ def run_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
 
     # epochs.plot()
 
-    ###############################################################################
+    ###########################################################################
     # Next, we define the parameters for multivariate CSC
 
     print('Building CSC')
+
+    # compute length of an atom, in timestamps
+    n_times_atom = int(np.round(atomDuration * sfreq))
 
     # cdlMEG = BatchCDL(
     #     # Shape of the dictionary
@@ -150,9 +154,6 @@ def run_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     #     solver_d='alternate_adaptive', solver_d_kwargs={'max_iter': 300},
     #     # Technical parameters
     #     verbose=1, random_state=0, n_jobs=16)
-
-    # compute length of an atom, in timestamps
-    n_times_atom = int(np.round(atomDuration * sfreq))
 
     cdlMEG = GreedyCDL(
         # Shape of the dictionary
@@ -188,20 +189,23 @@ def run_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         random_state=0,
         n_jobs=5)
 
-    ###############################################################################
+    ###########################################################################
     # Fit the model and learn rank1 atoms
     print('Running CSC')
     cdlMEG.fit(Y)
 
     if use_epoch:
         info = epochsResample.info
+        z_hat_ = cdlMEG.z_hat_
     else:
-        info = raw.info
+        print("Compute atoms' activation on full data")
+        z_hat_ = cdlMEG.transform(X[None, :])
+        info = raw.copy().pick_types(meg=True).info
 
     # Save results of CSC with dataset info
-    pickle.dump([cdlMEG, info], open(outputFile, "wb"))
+    pickle.dump([cdlMEG, info, z_hat_], open(outputFile, "wb"))
 
 
 if __name__ == '__main__':
-    run_csc(subjectID='CC620264', use_epoch=True, n_atoms=25,
+    run_csc(subjectID='CC620264', use_epoch=False, n_atoms=40,
             atomDuration=0.7, sfreq=150., reg=.2)

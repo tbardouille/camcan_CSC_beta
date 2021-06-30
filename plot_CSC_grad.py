@@ -86,7 +86,12 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         str(reg * 10) + 'reg.pkl'
     outputFile = subjectOutputDir / pkl_name
 
-    cdl, info, z_hat_ = pickle.load(open(outputFile, "rb"))
+    res = pickle.load(open(outputFile, "rb"))
+    if len(res) == 2:
+        cdl, info = res
+        z_hat_ = cdl.z_hat_
+    elif len(res) == 3:
+        cdl, info, z_hat_ = res
 
     sfreq = info['sfreq']
 
@@ -94,7 +99,6 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     activeStart = int(np.round(activeStartTime * sfreq))
     zWindowDuration = int(np.round(zWindowDurationTime * sfreq))
 
-    # %%
     if use_epoch:
         figNameSuffix = '_CSCepo'
     else:
@@ -161,20 +165,6 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
                              activeStart: this_event_tt + activeStart]
                 z_hat_trial.append(acti)
             z_hat_epo_.append(z_hat_trial)
-
-        # for i_atom in range(n_atoms):
-        #     z_hat_i_atom = []
-        #     z_hat = z_hat_[0][i_atom]
-        #     # roll to put activation to the peak amplitude time in the atom
-        #     shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
-        #     z_hat = np.roll(z_hat, shift)
-        #     z_hat[:shift] = 0  # pad with 0
-        #     # for each event, select activations in the window around event
-        #     for this_event_tt in events_tt:
-        #         acti = z_hat[this_event_tt -
-        #                      activeStart: this_event_tt + activeStart]
-        #         z_hat_i_atom.append(acti)
-        #     z_hat_epo_.append(z_hat_i_atom)
 
         allZ = np.array(z_hat_epo_)
     else:
@@ -247,7 +237,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         u_hat = cdl.u_hat_[i_atom]
         mne.viz.plot_topomap(u_hat, info, axes=ax, show=False)
         if i_col == 0:
-            ax.set_ylabel('Spatial', labelpad=70)
+            ax.set_ylabel('Spatial', labelpad=70, fontsize=20)
 
         # Temporal pattern
         ax = next(it_axes)
@@ -257,7 +247,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         ax.grid(True)
         ax.set_xlim(0, atomDuration)  # crop x axis
         if i_col == 0:
-            ax.set_ylabel('Temporal', labelpad=19)
+            ax.set_ylabel('Temporal', labelpad=14, fontsize=20)
 
         # Power Spectral Density (PSD)
         ax = next(it_axes)
@@ -265,43 +255,31 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         frequencies = np.linspace(0, sfreq / 2.0, len(psd))
         ax.semilogy(frequencies, psd, label='PSD', color='k')
         ax.set_xlim(0, 40)  # crop x axis
-        ax.set(xlabel='Frequencies (Hz)')
+        ax.set(xlabel='Frequencies (Hz)', fontsize=20)
         ax.grid(True)
         if i_col == 0:
-            ax.set_ylabel('Power Spectral Density', labelpad=18)
+            ax.set_ylabel('Power Spectral Density', labelpad=13, fontsize=20)
 
         # Atom's activations
         ax = next(it_axes)
         # z_hat = cdl.z_hat_[:, i_atom, :]
         # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
         z_hat = allZ[:, i_atom, :]
-        t1 = np.arange(allZ.shape[2]) / sfreq - 1.7
+        t1 = np.arange(allZ.shape[2]) / sfreq - activeStartTime
         ax.plot(t1, z_hat.T)
-        # if use_epoch:
-        #     t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
-        #     ax.plot(t1, z_hat.T)
-        # else:
-        #     z_hat = z_hat_[0][i_atom]
-        #     # roll to put activation to the peak amplitude time in the atom
-        #     shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
-        #     z_hat = np.roll(z_hat, shift)
-        #     z_hat[:shift] = 0  # pad with 0
-        #     for this_event_tt in events_tt:
-        #         acti = z_hat[this_event_tt - ttleft: this_event_tt + ttright]
-        #         t1 = np.arange(acti.shape[0]) / sfreq - 1.7
-        #         ax.plot(t1, acti)
-        ax.set(xlabel='Time (s)')
+        ax.set(xlabel='Time (s)', fontsize=20)
 
         if i_col == 0:
-            ax.set_ylabel("Atom's activations", labelpad=20)
+            ax.set_ylabel("Atom's activations", labelpad=20, fontsize=20)
 
-    plt.savefig(subjectOutputDir / ('global_figure' + figNameSuffix), dpi=300,
-                bbox_inches='tight')
+    plt.tight_layout()
+    plt.savefig(subjectOutputDir / ('global_figure' + figNameSuffix), dpi=300)
+    # bbox_inches='tight')
     plt.close()
 
     return None
 
 
 if __name__ == '__main__':
-    plot_csc(subjectID='CC620264', use_epoch=False, n_atoms=40,
-             atomDuration=0.7, sfreq=150., reg=.2)
+    plot_csc(subjectID='CC620264', use_epoch=False, n_atoms=30,
+             atomDuration=0.7, sfreq=150., reg=.1)

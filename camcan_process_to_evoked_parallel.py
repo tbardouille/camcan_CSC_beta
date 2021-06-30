@@ -164,7 +164,7 @@ def MEG_preproc(subjectID, maxwell_filter=False):
     stimOnsets = stimEvents[:, 0]
     # Get all events with ID > 10 (button press) - not always the same number
     buttonEvents = evs[np.where(evtID > 10)[0], :]
-    # Make the button press event always have ID=128
+    # Make the button press event always have ID = 128
     buttonOnsets = buttonEvents[:, 0]
     buttonEvents[:, 2] = 128
     # Stimulus loop to find the next button press under 2 seconds

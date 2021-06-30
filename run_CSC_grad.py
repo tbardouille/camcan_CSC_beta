@@ -207,5 +207,5 @@ def run_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
 
 
 if __name__ == '__main__':
-    run_csc(subjectID='CC620264', use_epoch=False, n_atoms=40,
-            atomDuration=0.7, sfreq=150., reg=.2)
+    run_csc(subjectID='CC620264', use_epoch=False, n_atoms=30,
+            atomDuration=0.7, sfreq=150., reg=.1)

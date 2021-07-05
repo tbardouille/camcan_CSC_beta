@@ -229,5 +229,6 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
 
 if __name__ == '__main__':
-    run_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=30,
-            atomDuration=0.7, sfreq=150., reg=.1)
+    run_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=25,
+            atomDuration=0.7, sfreq=150., use_greedy_cdl=True,
+            reg=.2, eps=1e-6, tol_z=1e-3)

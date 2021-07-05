@@ -78,14 +78,14 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     subjectOutputDir = outputDir / subjectID
     dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
 
-    # Load in the CSC results
-    fifName = dsPrefix + '_buttonPress_duration=3.4s_'
-    if cdl_on_epoch:
-        fifName += 'cleaned-epo.fif'
-    else:
-        fifName += 'cleaned-raw.fif'
-    megFile = inputDir / subjectID / fifName
+    # fifName = dsPrefix + '_buttonPress_duration=3.4s_'
+    # if cdl_on_epoch:
+    #     fifName += 'cleaned-epo.fif'
+    # else:
+    #     fifName += 'cleaned-raw.fif'
+    # megFile = inputDir / subjectID / fifName
 
+    # Load in the CSC results
     if cdl_on_epoch:
         pkl_name = 'CSCepochs_'
     else:
@@ -161,22 +161,7 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         eveFif_button = inputDir / str(subjectID) / \
             (dsPrefix + '_Under2SecResponseOnly-eve.fif')
         goodButtonEvents = mne.read_events(eveFif_button)
-        print(eveFif_button)
-        # events_tt = (goodButtonEvents[:, 0] / sfreq).astype(int)
-
-        # z_hat_epo_ = []
-        # for this_event_tt in events_tt:
-        #     z_hat_trial = []
-        #     for i_atom in range(n_atoms):
-        #         z_hat = z_hat_[0][i_atom]
-        #         # roll to put activation to the peak amplitude time in the atom
-        #         shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
-        #         z_hat = np.roll(z_hat, shift)
-        #         z_hat[:shift] = 0  # pad with 0
-        #         acti = z_hat[this_event_tt -
-        #                      activeStart: this_event_tt + activeStart]
-        #         z_hat_trial.append(acti)
-        #     z_hat_epo_.append(z_hat_trial)
+        print("Number of events: %i" % len(goodButtonEvents))
 
         # allZ = np.array(z_hat_epo_)
         info['events'] = np.array(goodButtonEvents)
@@ -191,6 +176,21 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         # epochs.drop_log = TOO SHORT?? -> Is that why we got no trial?
         # doc -> "'TOO_SHORT': If epoch didn't contain enough data names of
         # channels that exceeded the amplitude threshold"
+
+        # events_tt = (goodButtonEvents[:, 0] / sfreq).astype(int)
+        # z_hat_epo_ = []
+        # for this_event_tt in events_tt:
+        #     z_hat_trial = []
+        #     for i_atom in range(n_atoms):
+        #         z_hat = z_hat_[0][i_atom]
+        #         # roll to put activation to the peak amplitude time in the atom
+        #         shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
+        #         z_hat = np.roll(z_hat, shift)
+        #         z_hat[:shift] = 0  # pad with 0
+        #         acti = z_hat[this_event_tt -
+        #                      activeStart: this_event_tt + activeStart]
+        #         z_hat_trial.append(acti)
+        #     z_hat_epo_.append(z_hat_trial)
 
     # Calculate the sum of all Z values for prestim and active intervals
     activezHat = allZ[:, :, activeStart: activeStart + zWindowDuration]
@@ -226,6 +226,8 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     # Plot general figure: spatial & temporal pattern, power spectral density (PSD)
     # and activations
 
+    fontsize = 16
+
     n_plots = 4
     n_columns = min(5, n_atoms)
     split = int(np.ceil(n_atoms / n_columns))
@@ -237,13 +239,13 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         it_axes = iter(axes[i_row * n_plots:(i_row + 1) * n_plots, i_col])
 
         ax = next(it_axes)
-        ax.set(title='Atom #' + str(i_atom))
+        ax.set_title('Atom #' + str(i_atom), fontsize=fontsize)
 
         # Spatial pattern
         u_hat = cdl.u_hat_[i_atom]
         mne.viz.plot_topomap(u_hat, info, axes=ax, show=False)
         if i_col == 0:
-            ax.set_ylabel('Spatial', labelpad=70, fontsize=20)
+            ax.set_ylabel('Spatial', labelpad=86, fontsize=fontsize)
 
         # Temporal pattern
         ax = next(it_axes)
@@ -253,7 +255,7 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         ax.grid(True)
         ax.set_xlim(0, atomDuration)  # crop x axis
         if i_col == 0:
-            ax.set_ylabel('Temporal', labelpad=14, fontsize=20)
+            ax.set_ylabel('Temporal', labelpad=14, fontsize=fontsize)
 
         # Power Spectral Density (PSD)
         ax = next(it_axes)
@@ -261,10 +263,11 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         frequencies = np.linspace(0, sfreq / 2.0, len(psd))
         ax.semilogy(frequencies, psd, label='PSD', color='k')
         ax.set_xlim(0, 40)  # crop x axis
-        ax.set_xlabel('Frequencies (Hz)', fontsize=20)
+        ax.set_xlabel('Frequencies (Hz)', fontsize=fontsize)
         ax.grid(True)
         if i_col == 0:
-            ax.set_ylabel('Power Spectral Density', labelpad=13, fontsize=20)
+            ax.set_ylabel('Power Spectral Density',
+                          labelpad=13, fontsize=fontsize)
 
         # Atom's activations
         ax = next(it_axes)
@@ -273,15 +276,15 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         if shift_acti:
             # roll to put activation to the peak amplitude time in the atom
             shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
-            z_hat = np.roll(z_hat, shift)
-            z_hat[:shift] = 0  # pad with 0
+            z_hat = np.roll(z_hat, shift, axis=1)
+            z_hat[:, :shift] = 0  # pad with 0
         # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
         t1 = np.arange(allZ.shape[2]) / sfreq - activeStartTime
         ax.plot(t1, z_hat.T)
-        ax.set_xlabel('Time (s)', fontsize=20)
+        ax.set_xlabel('Time (s)', fontsize=fontsize)
 
         if i_col == 0:
-            ax.set_ylabel("Atom's activations", labelpad=20, fontsize=20)
+            ax.set_ylabel("Atom's activations", labelpad=7, fontsize=fontsize)
 
     plt.tight_layout()
     plt.savefig(subjectOutputDir / ('global_figure' + figNameSuffix), dpi=300)

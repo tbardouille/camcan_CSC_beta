@@ -14,7 +14,7 @@ import mne
 from alphacsc.viz.epoch import make_epochs
 
 
-def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
+def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
              sfreq=150., sensorType='grad', reg=.2, prestim=-1.7,
              poststim=1.7):
     """
@@ -24,7 +24,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     subjectID : str
         Subject to analyse
 
-    use_epoch : bool
+    cdl_on_epoch : bool
         if True, use the epoched data file, if False, use ful length data
         default is True
 
@@ -48,7 +48,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         default is 0.2
 
     prestim, poststim : float
-        Epoching parameters when use_epoch is False
+        Epoching parameters when cdl_on_epoch is False
 
     Returns
     -------
@@ -75,13 +75,13 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
 
     # Load in the CSC results
     fifName = dsPrefix + '_buttonPress_duration=3.4s_'
-    if use_epoch:
+    if cdl_on_epoch:
         fifName += 'cleaned-epo.fif'
     else:
         fifName += 'cleaned-raw.fif'
     megFile = inputDir / subjectID / fifName
 
-    if use_epoch:
+    if cdl_on_epoch:
         pkl_name = 'CSCepochs_'
     else:
         pkl_name = 'CSCraw_'
@@ -103,7 +103,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     activeStart = int(np.round(activeStartTime * sfreq))
     zWindowDuration = int(np.round(zWindowDurationTime * sfreq))
 
-    if use_epoch:
+    if cdl_on_epoch:
         figNameSuffix = '_CSCepo'
     else:
         figNameSuffix = '_CSCraw'
@@ -148,9 +148,11 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
 
     # get effective n_atoms
     n_atoms = z_hat_.shape[1]
-    # transform z_hat_ into epoched, with shape (n_events, n_atoms, duration)
-    if not use_epoch:
-        # # file with good button events
+    if cdl_on_epoch:
+        allZ = cdl.z_hat_
+    else:
+        # transform z_hat_ into epoched, with shape (n_events, n_atoms, duration)
+        # file with good button events
         eveFif_button = inputDir / str(subjectID) / \
             (dsPrefix + '_Under2SecResponseOnly-eve.fif')
         goodButtonEvents = mne.read_events(eveFif_button)
@@ -183,8 +185,6 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         # epochs.drop_log = TOO SHORT?? -> Is that why we got no trial?
         # doc -> "'TOO_SHORT': If epoch didn't contain enough data names of
         # channels that exceeded the amplitude threshold"
-    else:
-        allZ = cdl.z_hat_
 
     # Calculate the sum of all Z values for prestim and active intervals
     activezHat = allZ[:, :, activeStart: activeStart + zWindowDuration]
@@ -220,7 +220,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     # Plot general figure: spatial & temporal pattern, power spectral density (PSD)
     # and activations
 
-    # if not use_epoch:
+    # if not cdl_on_epoch:
     #     # file with epochs
     #     # epochFif = subjectOutputDir / \
     #     #     (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif')
@@ -301,5 +301,5 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
 
 
 if __name__ == '__main__':
-    plot_csc(subjectID='CC620264', use_epoch=False, n_atoms=25,
+    plot_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=25,
              atomDuration=0.7, sfreq=150., reg=.2)

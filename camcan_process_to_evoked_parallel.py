@@ -143,8 +143,6 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
     sl = StreamToLogger(stderr_logger, logging.ERROR)
     sys.stderr = sl
 
-    print(str(subjectID))
-
     # Read raw data
     raw = mne.io.read_raw_fif(tsssFif, preload=True)
     raw.filter(l_freq=None, h_freq=125)

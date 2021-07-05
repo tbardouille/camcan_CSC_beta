@@ -16,7 +16,7 @@ from alphacsc.viz.epoch import make_epochs
 
 def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
              sfreq=150., sensorType='grad', reg=.2, prestim=-1.7,
-             poststim=1.7):
+             poststim=1.7, shift_acti=False):
     """
 
     Parameters
@@ -49,6 +49,11 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
     prestim, poststim : float
         Epoching parameters when cdl_on_epoch is False
+
+    shift_acti : bool
+        if True, shift the atom's activation to put activation to the peak
+        amplitude time in the atom
+        default is False
 
     Returns
     -------
@@ -176,12 +181,13 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         # allZ = np.array(z_hat_epo_)
         info['events'] = np.array(goodButtonEvents)
         info['event_id'] = None
-        allZ = make_epochs(z_hat_, info, t_lim=(-1.7, 1.7),
+        allZ = make_epochs(z_hat_, info,
+                           t_lim=(prestim, poststim),
                            n_times_atom=int(np.round(atomDuration * sfreq)))
 
         print("allZ shape:", allZ.shape)
         # REMARK
-        # allZ = array([], shape=(0, 30, 511), dtype=float64)
+        # allZ = array([...], shape=(6, 25, 511), dtype=float64)
         # epochs.drop_log = TOO SHORT?? -> Is that why we got no trial?
         # doc -> "'TOO_SHORT': If epoch didn't contain enough data names of
         # channels that exceeded the amplitude threshold"
@@ -219,22 +225,6 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
     # Plot general figure: spatial & temporal pattern, power spectral density (PSD)
     # and activations
-
-    # if not cdl_on_epoch:
-    #     # file with epochs
-    #     # epochFif = subjectOutputDir / \
-    #     #     (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif')
-    #     # epochs_clean = mne.read_epochs(epochFif)
-    #     # events_tt = (epochs_clean.events[:, 0] / sfreq).astype(int)
-    #     # tmin, tmax = epochs_clean.tmin, epochs_clean.tmax
-    #     # ttleft, ttright = int(abs(tmin) * sfreq), int(abs(tmax) * sfreq)
-
-    #     # file with good button events
-    #     eveFif_button = inputDir / str(subjectID) / \
-    #         (dsPrefix + '_Under2SecResponseOnly-eve.fif')
-    #     goodButtonEvents = mne.read_events(eveFif_button)
-    #     events_tt = (goodButtonEvents[:, 0] / sfreq).astype(int)
-    #     ttleft, ttright = int(abs(prestim) * sfreq), int(abs(poststim) * sfreq)
 
     n_plots = 4
     n_columns = min(5, n_atoms)
@@ -279,8 +269,13 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         # Atom's activations
         ax = next(it_axes)
         # z_hat = cdl.z_hat_[:, i_atom, :]
-        # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
         z_hat = allZ[:, i_atom, :]
+        if shift_acti:
+            # roll to put activation to the peak amplitude time in the atom
+            shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
+            z_hat = np.roll(z_hat, shift)
+            z_hat[:shift] = 0  # pad with 0
+        # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
         t1 = np.arange(allZ.shape[2]) / sfreq - activeStartTime
         ax.plot(t1, z_hat.T)
         ax.set_xlabel('Time (s)', fontsize=20)
@@ -302,4 +297,4 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
 if __name__ == '__main__':
     plot_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=25,
-             atomDuration=0.7, sfreq=150., reg=.2)
+             atomDuration=0.7, sfreq=150., reg=.2, shift_acti=True)

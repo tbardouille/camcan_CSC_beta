@@ -160,7 +160,7 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             n_times_atom=n_times_atom,
             # Request a rank1 dictionary with unit norm temporal and spatial maps
             rank1=True, uv_constraint='separate',
-            window=True,
+            window=True,  # in Tim's code: False
             # Initialize the dictionary with random chunk from the data
             D_init='chunk',
             # rescale the regularization parameter to be 20% of lambda_max

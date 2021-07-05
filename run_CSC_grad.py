@@ -98,13 +98,20 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         sys.exit("Put %s file into %s folder."
                  % (fifName, subjectInputDir))
 
+    # Define CDL results pickle name
+    if use_batch_cdl:
+        pkl_name = 'Batch'
+    elif use_greedy_cdl:
+        pkl_name = 'Greedy'
+
     if cdl_on_epoch:
-        pkl_name = 'CSCepochs_'
+        pkl_name += 'CSCepochs_'
     else:
-        pkl_name = 'CSCraw_'
+        pkl_name += 'CSCraw_'
     pkl_name += str(int(atomDuration * 1000)) + \
         'ms_' + sensorType + str(n_atoms) + 'atoms_' + \
-        str(reg * 10) + 'reg.pkl'
+        str(int(reg * 10)) + 'reg' + str(int(eps * 1e4)) + \
+        'eps' + str(int(tol_z * 1e2)) + 'tol_z' + '.pkl'
     outputFile = subjectOutputDir / pkl_name
 
     # Read in the data
@@ -160,6 +167,7 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             n_times_atom=n_times_atom,
             # Request a rank1 dictionary with unit norm temporal and spatial maps
             rank1=True, uv_constraint='separate',
+            # apply a temporal window reparametrization
             window=True,  # in Tim's code: False
             # Initialize the dictionary with random chunk from the data
             D_init='chunk',
@@ -230,5 +238,6 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
 if __name__ == '__main__':
     run_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=25,
-            atomDuration=0.7, sfreq=150., use_greedy_cdl=True,
-            reg=.2, eps=1e-6, tol_z=1e-3)
+            atomDuration=0.7, sfreq=150.,
+            use_batch_cdl=True, use_greedy_cdl=False,
+            reg=.2, eps=1e-4, tol_z=1e-2)

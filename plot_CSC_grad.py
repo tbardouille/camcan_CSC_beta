@@ -15,8 +15,10 @@ from alphacsc.viz.epoch import make_epochs
 
 
 def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
-             sfreq=150., sensorType='grad', reg=.2, prestim=-1.7,
-             poststim=1.7, shift_acti=False):
+             sfreq=150., sensorType='grad',
+             use_batch_cdl=False, use_greedy_cdl=True,
+             reg=.2, eps=1e-4, tol_z=1e-2,
+             activeStartTime=1.7, shift_acti=False):
     """
 
     Parameters
@@ -43,11 +45,23 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         sensor type to use for CSC
         default is 'grad'
 
+    use_batch_cdl, use_greedy_cdl : bool
+        decide wether to use alphacsc.BatchCDL or alphacsc.GreedyCDL
+        one and only one must be set to True
+
     reg : float
         regularization parameter for the CSC
         default is 0.2
 
-    prestim, poststim : float
+    eps : float
+        CDL  convergence threshold
+        default is 1e-4
+
+    tol_z : float
+        stopping criteria for Z 
+        default is 1e-2
+
+    activeStartTime : float
         Epoching parameters when cdl_on_epoch is False
 
     shift_acti : bool
@@ -60,8 +74,9 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     no returns
 
     """
-
     # %%
+
+    assert (use_batch_cdl + use_greedy_cdl) == 1
 
     # Paths
     # homeDir = Path(os.path.expanduser("~"))
@@ -86,13 +101,19 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     # megFile = inputDir / subjectID / fifName
 
     # Load in the CSC results
+    if use_batch_cdl:
+        pkl_name = 'Batch'
+    elif use_greedy_cdl:
+        pkl_name = 'Greedy'
+
     if cdl_on_epoch:
-        pkl_name = 'CSCepochs_'
+        pkl_name += 'CSCepochs_'
     else:
-        pkl_name = 'CSCraw_'
+        pkl_name += 'CSCraw_'
     pkl_name += str(int(atomDuration * 1000)) + \
         'ms_' + sensorType + str(n_atoms) + 'atoms_' + \
-        str(reg * 10) + 'reg.pkl'
+        str(int(reg * 10)) + 'reg' + str(int(eps * 1e4)) + \
+        'eps' + str(int(tol_z * 1e2)) + 'tol_z' + '.pkl'
     outputFile = subjectOutputDir / pkl_name
 
     res = pickle.load(open(outputFile, "rb"))
@@ -108,13 +129,21 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     activeStart = int(np.round(activeStartTime * sfreq))
     zWindowDuration = int(np.round(zWindowDurationTime * sfreq))
 
+    # Define figures names suffixes
+    if use_batch_cdl:
+        figNameSuffix = '_Batch'
+    elif use_greedy_cdl:
+        figNameSuffix = '_Greedy'
+
     if cdl_on_epoch:
-        figNameSuffix = '_CSCepo'
+        figNameSuffix += 'CSCepo'
     else:
-        figNameSuffix = '_CSCraw'
+        figNameSuffix += 'CSCraw'
+
     figNameSuffix += '_' + str(int(atomDuration * 1000)) + \
         'ms_' + sensorType + str(n_atoms) + 'atoms_' + \
-        str(reg * 10) + 'reg.pdf'
+        str(reg * 10) + 'reg' + str(int(eps * 1e4)) + \
+        'eps' + str(int(tol_z * 1e2)) + 'tol_z' + '.pdf'
 
     # # Plot time course for all atoms
     # fig, axes = plt.subplots(5, 5, sharex=True, sharey=True, figsize=(11, 8.5))
@@ -167,7 +196,7 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         info['events'] = np.array(goodButtonEvents)
         info['event_id'] = None
         allZ = make_epochs(z_hat_, info,
-                           t_lim=(prestim, poststim),
+                           t_lim=(-activeStartTime, activeStartTime),
                            n_times_atom=int(np.round(atomDuration * sfreq)))
 
         print("allZ shape:", allZ.shape)
@@ -300,4 +329,7 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
 if __name__ == '__main__':
     plot_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=25,
-             atomDuration=0.7, sfreq=150., reg=.2, shift_acti=True)
+             atomDuration=0.7, sfreq=150.,
+             use_batch_cdl=True, use_greedy_cdl=False,
+             reg=.2, eps=1e-4, tol_z=1e-2,
+             activeStartTime=2, shift_acti=True)

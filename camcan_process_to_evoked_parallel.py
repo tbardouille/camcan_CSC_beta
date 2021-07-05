@@ -57,14 +57,14 @@ class StreamToLogger(object):
             self.logger.log(self.log_level, line.rstrip())
 
 
-def MEG_preproc(subjectID, maxwell_filter=False):
+def MEG_preproc(subjectID, apply_maxwell_filter=False):
     """
 
     Parameters
     ----------
     subjectID : str
 
-    maxwell_filter : bool
+    apply_maxwell_filter : bool
         if True, apply a Maxwell filter
         default is False (as Tim's file is pre-filtered)
 
@@ -102,7 +102,7 @@ def MEG_preproc(subjectID, maxwell_filter=False):
     if not tsssFifDir.exists():
         tsssFifDir.mkdir(parents=True)
 
-    if maxwell_filter:
+    if apply_maxwell_filter:
         tsssFifName = 'sub-' + str(subjectID) + '_ses-smt_task-smt_meg.fif'
     else:
         tsssFifName = dsPrefix + '.fif'
@@ -149,7 +149,7 @@ def MEG_preproc(subjectID, maxwell_filter=False):
     raw = mne.io.read_raw_fif(tsssFif, preload=True)
     raw.filter(l_freq=None, h_freq=125)
     raw.notch_filter([50, 100])
-    if maxwell_filter:
+    if apply_maxwell_filter:
         raw = mne.preprocessing.maxwell_filter(raw, calibration=sssCalFile,
                                                cross_talk=ctSparseFile,
                                                st_duration=10.0)
@@ -219,9 +219,9 @@ def MEG_preproc(subjectID, maxwell_filter=False):
 
         # Write out event files for all stimuli/responses and "good" button
         # presses only
-        # evs[:, 0] -= raw.first_samp
-        # goodButtonEvents[:, 0] -= raw.first_samp
+        evs[:, 0] -= raw.first_samp
         mne.write_events(eveFif_all, evs)
+        goodButtonEvents[:, 0] -= raw.first_samp
         mne.write_events(eveFif_button, goodButtonEvents)
     else:
         print("No button event found.")
@@ -311,5 +311,5 @@ if __name__ == '__main__':
     # # Run the jobs
     # pool.map(MEG_preproc, subjectIDs)
 
-    MEG_preproc('CC620264', maxwell_filter=True)
+    MEG_preproc('CC620264', apply_maxwell_filter=True)
     # MEG_preproc('CC620262')

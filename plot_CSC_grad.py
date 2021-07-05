@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 
 import mne
 
+from alphacsc.viz.epoch import make_epochs
+
 
 def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
              sfreq=150., sensorType='grad', reg=.2, prestim=-1.7,
@@ -53,6 +55,8 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     no returns
 
     """
+
+    # %%
 
     # Paths
     # homeDir = Path(os.path.expanduser("~"))
@@ -146,27 +150,39 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     n_atoms = z_hat_.shape[1]
     # transform z_hat_ into epoched, with shape (n_events, n_atoms, duration)
     if not use_epoch:
-        # file with good button events
+        # # file with good button events
         eveFif_button = inputDir / str(subjectID) / \
             (dsPrefix + '_Under2SecResponseOnly-eve.fif')
         goodButtonEvents = mne.read_events(eveFif_button)
-        events_tt = (goodButtonEvents[:, 0] / sfreq).astype(int)
+        print(eveFif_button)
+        # events_tt = (goodButtonEvents[:, 0] / sfreq).astype(int)
 
-        z_hat_epo_ = []
-        for this_event_tt in events_tt:
-            z_hat_trial = []
-            for i_atom in range(n_atoms):
-                z_hat = z_hat_[0][i_atom]
-                # roll to put activation to the peak amplitude time in the atom
-                shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
-                z_hat = np.roll(z_hat, shift)
-                z_hat[:shift] = 0  # pad with 0
-                acti = z_hat[this_event_tt -
-                             activeStart: this_event_tt + activeStart]
-                z_hat_trial.append(acti)
-            z_hat_epo_.append(z_hat_trial)
+        # z_hat_epo_ = []
+        # for this_event_tt in events_tt:
+        #     z_hat_trial = []
+        #     for i_atom in range(n_atoms):
+        #         z_hat = z_hat_[0][i_atom]
+        #         # roll to put activation to the peak amplitude time in the atom
+        #         shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
+        #         z_hat = np.roll(z_hat, shift)
+        #         z_hat[:shift] = 0  # pad with 0
+        #         acti = z_hat[this_event_tt -
+        #                      activeStart: this_event_tt + activeStart]
+        #         z_hat_trial.append(acti)
+        #     z_hat_epo_.append(z_hat_trial)
 
-        allZ = np.array(z_hat_epo_)
+        # allZ = np.array(z_hat_epo_)
+        info['events'] = np.array(goodButtonEvents)
+        info['event_id'] = None
+        allZ = make_epochs(z_hat_, info, t_lim=(-1.7, 1.7),
+                           n_times_atom=int(np.round(atomDuration * sfreq)))
+
+        print("allZ shape:", allZ.shape)
+        # REMARK
+        # allZ = array([], shape=(0, 30, 511), dtype=float64)
+        # epochs.drop_log = TOO SHORT?? -> Is that why we got no trial?
+        # doc -> "'TOO_SHORT': If epoch didn't contain enough data names of
+        # channels that exceeded the amplitude threshold"
     else:
         allZ = cdl.z_hat_
 
@@ -255,7 +271,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         frequencies = np.linspace(0, sfreq / 2.0, len(psd))
         ax.semilogy(frequencies, psd, label='PSD', color='k')
         ax.set_xlim(0, 40)  # crop x axis
-        ax.set(xlabel='Frequencies (Hz)', fontsize=20)
+        ax.set_xlabel('Frequencies (Hz)', fontsize=20)
         ax.grid(True)
         if i_col == 0:
             ax.set_ylabel('Power Spectral Density', labelpad=13, fontsize=20)
@@ -267,7 +283,7 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
         z_hat = allZ[:, i_atom, :]
         t1 = np.arange(allZ.shape[2]) / sfreq - activeStartTime
         ax.plot(t1, z_hat.T)
-        ax.set(xlabel='Time (s)', fontsize=20)
+        ax.set_xlabel('Time (s)', fontsize=20)
 
         if i_col == 0:
             ax.set_ylabel("Atom's activations", labelpad=20, fontsize=20)
@@ -277,9 +293,13 @@ def plot_csc(subjectID, use_epoch=True, n_atoms=25, atomDuration=0.7,
     # bbox_inches='tight')
     plt.close()
 
+    # %%
+
     return None
+
+# %%
 
 
 if __name__ == '__main__':
-    plot_csc(subjectID='CC620264', use_epoch=False, n_atoms=30,
-             atomDuration=0.7, sfreq=150., reg=.1)
+    plot_csc(subjectID='CC620264', use_epoch=False, n_atoms=25,
+             atomDuration=0.7, sfreq=150., reg=.2)

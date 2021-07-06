@@ -1,4 +1,4 @@
-# %%
+
 import os
 import pandas as pd
 import numpy as np
@@ -10,8 +10,9 @@ import multiprocessing as mp
 import matplotlib.pyplot as plt
 
 import mne
-
 from alphacsc.viz.epoch import make_epochs
+
+from utils import getPaths, getCSCPickleName
 
 
 def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
@@ -62,7 +63,8 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         default is 1e-2
 
     activeStartTime : float
-        Epoching parameters when cdl_on_epoch is False
+        Epoching parameters when cdl_on_epoch is False,
+        seconds from start of trial
 
     shift_acti : bool
         if True, shift the atom's activation to put activation to the peak
@@ -74,46 +76,20 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     no returns
 
     """
-    # %%
 
     assert (use_batch_cdl + use_greedy_cdl) == 1
 
-    # Paths
-    # homeDir = Path(os.path.expanduser("~"))
-    homeDir = Path.home()
-    inputDir = homeDir / 'camcan' / \
-        'proc_data' / 'TaskSensorAnalysis_transdef'
-    outputDir = homeDir / 'data' / 'CSC'
-
-    # [seconds from start of trial, i.e., -1.7 seconds wrt cue]
-    preStimStartTime = 0
-    activeStartTime = 1.7   # [seconds from start of trial
-    zWindowDurationTime = 0.5   # in seconds
-
-    subjectOutputDir = outputDir / subjectID
     dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
 
-    # fifName = dsPrefix + '_buttonPress_duration=3.4s_'
-    # if cdl_on_epoch:
-    #     fifName += 'cleaned-epo.fif'
-    # else:
-    #     fifName += 'cleaned-raw.fif'
-    # megFile = inputDir / subjectID / fifName
+    dictPaths = getPaths(subjectID)
+    subjectInputDir = dictPaths['procSubjectOutDir']
+    subjectOutputDir = dictPaths['cscSubjectOutDir']
 
     # Load in the CSC results
-    if use_batch_cdl:
-        pkl_name = 'Batch'
-    elif use_greedy_cdl:
-        pkl_name = 'Greedy'
-
-    if cdl_on_epoch:
-        pkl_name += 'CSCepochs_'
-    else:
-        pkl_name += 'CSCraw_'
-    pkl_name += str(int(atomDuration * 1000)) + \
-        'ms_' + sensorType + str(n_atoms) + 'atoms_' + \
-        str(int(reg * 10)) + 'reg' + str(int(eps * 1e4)) + \
-        'eps' + str(int(tol_z * 1e2)) + 'tol_z' + '.pkl'
+    pkl_name = getCSCPickleName(
+        use_batch_cdl=use_batch_cdl, use_greedy_cdl=use_greedy_cdl,
+        cdl_on_epoch=cdl_on_epoch, atomDuration=atomDuration,
+        sensorType=sensorType, n_atoms=n_atoms, reg=reg, eps=eps, tol_z=tol_z)
     outputFile = subjectOutputDir / pkl_name
 
     res = pickle.load(open(outputFile, "rb"))
@@ -125,25 +101,15 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
     sfreq = info['sfreq']
 
+    # [seconds from start of trial, i.e., -1.7 seconds wrt cue]
+    preStimStartTime = 0
+    zWindowDurationTime = 0.5   # in seconds
     preStimStart = int(np.round(preStimStartTime * sfreq))
     activeStart = int(np.round(activeStartTime * sfreq))
     zWindowDuration = int(np.round(zWindowDurationTime * sfreq))
 
     # Define figures names suffixes
-    if use_batch_cdl:
-        figNameSuffix = '_Batch'
-    elif use_greedy_cdl:
-        figNameSuffix = '_Greedy'
-
-    if cdl_on_epoch:
-        figNameSuffix += 'CSCepo'
-    else:
-        figNameSuffix += 'CSCraw'
-
-    figNameSuffix += '_' + str(int(atomDuration * 1000)) + \
-        'ms_' + sensorType + str(n_atoms) + 'atoms_' + \
-        str(reg * 10) + 'reg' + str(int(eps * 1e4)) + \
-        'eps' + str(int(tol_z * 1e2)) + 'tol_z' + '.pdf'
+    figNameSuffix = '_' + pkl_name.replace('.pkl', '.pdf')
 
     # # Plot time course for all atoms
     # fig, axes = plt.subplots(5, 5, sharex=True, sharey=True, figsize=(11, 8.5))
@@ -183,16 +149,15 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     # get effective n_atoms
     n_atoms = z_hat_.shape[1]
     if cdl_on_epoch:
-        allZ = cdl.z_hat_
+        allZ = z_hat_
     else:
         # transform z_hat_ into epoched, with shape (n_events, n_atoms, duration)
         # file with good button events
-        eveFif_button = inputDir / str(subjectID) / \
+        eveFif_button = subjectOutputDir / \
             (dsPrefix + '_Under2SecResponseOnly-eve.fif')
         goodButtonEvents = mne.read_events(eveFif_button)
         print("Number of events: %i" % len(goodButtonEvents))
 
-        # allZ = np.array(z_hat_epo_)
         info['events'] = np.array(goodButtonEvents)
         info['event_id'] = None
         allZ = make_epochs(z_hat_, info,
@@ -200,26 +165,6 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
                            n_times_atom=int(np.round(atomDuration * sfreq)))
 
         print("allZ shape:", allZ.shape)
-        # REMARK
-        # allZ = array([...], shape=(6, 25, 511), dtype=float64)
-        # epochs.drop_log = TOO SHORT?? -> Is that why we got no trial?
-        # doc -> "'TOO_SHORT': If epoch didn't contain enough data names of
-        # channels that exceeded the amplitude threshold"
-
-        # events_tt = (goodButtonEvents[:, 0] / sfreq).astype(int)
-        # z_hat_epo_ = []
-        # for this_event_tt in events_tt:
-        #     z_hat_trial = []
-        #     for i_atom in range(n_atoms):
-        #         z_hat = z_hat_[0][i_atom]
-        #         # roll to put activation to the peak amplitude time in the atom
-        #         shift = np.argmax(np.abs(cdl.v_hat_[i_atom]))
-        #         z_hat = np.roll(z_hat, shift)
-        #         z_hat[:shift] = 0  # pad with 0
-        #         acti = z_hat[this_event_tt -
-        #                      activeStart: this_event_tt + activeStart]
-        #         z_hat_trial.append(acti)
-        #     z_hat_epo_.append(z_hat_trial)
 
     # Calculate the sum of all Z values for prestim and active intervals
     activezHat = allZ[:, :, activeStart: activeStart + zWindowDuration]
@@ -252,8 +197,8 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     plt.savefig(subjectOutputDir / ('t_test' + figNameSuffix), dpi=300)
     plt.close()
 
-    # Plot general figure: spatial & temporal pattern, power spectral density (PSD)
-    # and activations
+    # Plot general figure: spatial & temporal pattern, power spectral density
+    # (PSD) and activations
 
     fontsize = 16
 
@@ -320,16 +265,12 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     # bbox_inches='tight')
     plt.close()
 
-    # %%
-
     return None
-
-# %%
 
 
 if __name__ == '__main__':
-    plot_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=25,
+    plot_csc(subjectID='CC620264', cdl_on_epoch=False, n_atoms=30,
              atomDuration=0.7, sfreq=150.,
              use_batch_cdl=True, use_greedy_cdl=False,
-             reg=.2, eps=1e-4, tol_z=1e-2,
+             reg=.2, eps=1e-6, tol_z=1e-2,
              activeStartTime=2, shift_acti=True)

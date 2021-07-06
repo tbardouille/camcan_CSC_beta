@@ -2,19 +2,22 @@
 #       This may not extract beta bursts because the interval is too long
 #       but it should find mu bursts
 
-import os
 import sys
-from pathlib import Path
 import numpy as np
 import pickle
 from scipy.signal import tukey
-from scipy.signal.filter_design import maxflat
+from joblib import Memory
 
 import mne
 from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 
+from utils import CACHEDIR, getPaths, getCSCPickleName, getGoodButtonsEvents
 
+memory = Memory(CACHEDIR, verbose=0)
+
+
+@memory.cache()
 def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             sfreq=150., sensorType='grad',
             use_batch_cdl=False, use_greedy_cdl=True,
@@ -58,40 +61,29 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         default is 1e-4
 
     tol_z : float
-        stopping criteria for Z 
+        stopping criteria for Z
         default is 1e-2
+
 
     Returns
     -------
-    no returns
+    None
 
     """
 
     assert (use_batch_cdl + use_greedy_cdl) == 1
 
-    # Paths
-    # homeDir = Path(os.path.expanduser("~"))
-    homeDir = Path.home()
-    # inputDir = homeDir / 'data/camcan/proc_data/TaskSensorAnalysis_transdef'
-    # same path that the one in camcam_process_to_evoked_parallel.py
-    inputDir = homeDir / 'camcan' / 'proc_data' / 'TaskSensorAnalysis_transdef'
-    outputDir = homeDir / 'data' / 'CSC'
+    dictPaths = getPaths(subjectID)
+    subjectInputDir = dictPaths['procSubjectOutDir']
+    subjectOutputDir = dictPaths['cscSubjectOutDir']
 
-    # Create folders
-    subjectInputDir = inputDir / subjectID
-    if not subjectInputDir.exists():
-        subjectInputDir.mkdir(parents=True)
-
-    subjectOutputDir = outputDir / subjectID
-    if not subjectOutputDir.exists():
-        subjectOutputDir.mkdir(parents=True)
+    dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
 
     print('Reading MEG Data')
-    fifName = 'transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_'
     if cdl_on_epoch:
-        fifName += 'cleaned-epo.fif'
+        fifName = dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif'
     else:
-        fifName += 'cleaned-raw.fif'
+        fifName = dsPrefix + '_cleaned.fif'
     megFile = subjectInputDir / fifName
 
     if not megFile.exists():
@@ -99,25 +91,17 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
                  % (fifName, subjectInputDir))
 
     # Define CDL results pickle name
-    if use_batch_cdl:
-        pkl_name = 'Batch'
-    elif use_greedy_cdl:
-        pkl_name = 'Greedy'
-
-    if cdl_on_epoch:
-        pkl_name += 'CSCepochs_'
-    else:
-        pkl_name += 'CSCraw_'
-    pkl_name += str(int(atomDuration * 1000)) + \
-        'ms_' + sensorType + str(n_atoms) + 'atoms_' + \
-        str(int(reg * 10)) + 'reg' + str(int(eps * 1e4)) + \
-        'eps' + str(int(tol_z * 1e2)) + 'tol_z' + '.pkl'
+    pkl_name = getCSCPickleName(
+        use_batch_cdl=use_batch_cdl, use_greedy_cdl=use_greedy_cdl,
+        cdl_on_epoch=cdl_on_epoch, atomDuration=atomDuration,
+        sensorType=sensorType, n_atoms=n_atoms, reg=reg, eps=eps, tol_z=tol_z)
     outputFile = subjectOutputDir / pkl_name
 
-    # Read in the data
+    # Read and transform the data
     if cdl_on_epoch:
         epochs = mne.read_epochs(megFile)
         epochs.pick_types(meg=sensorType)
+        # epochs.plot()
 
         # Band-pass filter the data to a range of interest
         epochsBandPass = epochs.filter(l_freq=2, h_freq=45)
@@ -135,7 +119,6 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         num_trials, num_chans, num_samples = Y.shape
         Y *= tukey(num_samples, alpha=0.1)[None, None, :]
         Y /= np.std(Y)
-
     else:
         raw = mne.io.read_raw_fif(megFile, preload=True)
         raw.pick_types(meg=sensorType, stim=True)
@@ -147,10 +130,14 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         raw, events = raw.resample(
             sfreq, npad='auto', verbose=False, events=events)
 
+        _, goodButtonEvents = getGoodButtonsEvents(
+            raw, stim_channel='STI101', subtract_first_samp=True)
+        mne.write_events(subjectOutputDir /
+                         (dsPrefix + '_Under2SecResponseOnly-eve.fif'),
+                         goodButtonEvents)
+
         X = raw.get_data(picks=['meg'])
         Y = split_signal(X, n_splits=10, apply_window=True)
-
-    # epochs.plot()
 
     ###########################################################################
     # Next, we define the parameters for multivariate CSC
@@ -160,64 +147,39 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     # compute length of an atom, in timestamps
     n_times_atom = int(np.round(atomDuration * sfreq))
 
-    if use_batch_cdl:
-        cdlMEG = BatchCDL(
-            # Shape of the dictionary
-            n_atoms=n_atoms,
-            n_times_atom=n_times_atom,
-            # Request a rank1 dictionary with unit norm temporal and spatial maps
-            rank1=True, uv_constraint='separate',
-            # apply a temporal window reparametrization
-            window=True,  # in Tim's code: False
-            # Initialize the dictionary with random chunk from the data
-            D_init='chunk',
-            # rescale the regularization parameter to be 20% of lambda_max
-            lmbd_max="scaled", reg=reg,
-            # Number of iteration for the alternate minimization and cvg threshold
-            n_iter=100, eps=eps,
-            # solver for the z-step
-            solver_z="lgcd",
-            solver_z_kwargs={'tol': tol_z,
-                             'max_iter': 1000},
-            # solver for the d-step
-            solver_d='alternate_adaptive',
-            solver_d_kwargs={'max_iter': 300},
-            # sort atoms by explained variances
-            sort_atoms=True,
-            # Technical parameters
-            verbose=1, random_state=0, n_jobs=5)
+    cdlParams = {
+        # Shape of the dictionary
+        'n_atoms': n_atoms,
+        'n_times_atom': n_times_atom,
+        # Request a rank1 dictionary with unit norm temporal and spatial maps
+        'rank1': True, 'uv_constraint': 'separate',
+        # Apply a temporal window reparametrization
+        'window': True,  # in Tim's: False
+        # At the end, refit the activations with fixed support
+        # and no reg to unbias
+        'unbiased_z_hat': True,  # in Tim's: False
+        # Initialize the dictionary with random chunk from the data
+        'D_init': 'chunk',
+        # Rescale the regularization parameter to be 20% of lambda_max
+        'lmbd_max': 'scaled', 'reg': reg,
+        # Number of iteration for the alternate minimization and cvg threshold
+        'n_iter': 100, 'eps': eps,
+        # Solver for the z-step
+        'solver_z': 'lgcd',
+        'solver_z_kwargs': {'tol': tol_z,
+                            'max_iter': 1000},
+        # Solver for the d-step
+        'solver_d': 'alternate_adaptive',
+        'solver_d_kwargs': {'max_iter': 300},
+        # Sort atoms by explained variances
+        'sort_atoms': True,
+        # Technical parameters
+        'verbose': 1, 'random_state': 0, 'n_jobs': 5}
 
+    if use_batch_cdl:
+        cdlMEG = BatchCDL(**cdlParams)
     elif use_greedy_cdl:
-        cdlMEG = GreedyCDL(
-            # Shape of the dictionary
-            n_atoms=n_atoms,
-            n_times_atom=n_times_atom,
-            # Request a rank1 dictionary with unit norm temporal and spatial maps
-            rank1=True, uv_constraint='separate',
-            # apply a temporal window reparametrization
-            window=True,
-            # at the end, refit the activations with fixed support
-            # and no reg to unbias
-            unbiased_z_hat=True,
-            # Initialize the dictionary with random chunk from the data
-            D_init='chunk',
-            # rescale the regularization parameter to be a percentage of lambda_max
-            lmbd_max="scaled",  # original value: "scaled"
-            reg=reg,
-            # Number of iteration for the alternate minimization and cvg threshold
-            n_iter=100,  # original value: 100
-            eps=eps,  # original value: 1e-4
-            # solver for the z-step
-            solver_z="lgcd",
-            solver_z_kwargs={'tol': tol_z,  # stopping criteria
-                             'max_iter': 1000},
-            # solver for the d-step
-            solver_d='alternate_adaptive',
-            solver_d_kwargs={'max_iter': 300},  # original value: 300
-            # sort atoms by explained variances
-            sort_atoms=True,
-            # Technical parameters
-            verbose=1, random_state=0, n_jobs=5)
+        cdlMEG = GreedyCDL(**cdlParams)
 
     ###########################################################################
     # Fit the model and learn rank1 atoms
@@ -233,7 +195,10 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
         info = raw.copy().pick_types(meg=True).info
 
     # Save results of CSC with dataset info
-    pickle.dump([cdlMEG, info, z_hat_], open(outputFile, "wb"))
+    res = [cdlMEG, info, z_hat_]
+    pickle.dump(res, open(outputFile, "wb"))
+
+    return res
 
 
 if __name__ == '__main__':

@@ -1,18 +1,20 @@
 #!/usr/bin/env python
 
 # %%
-# Import libraries
+
 # import csv
 import os
-from pathlib import Path
+# from pathlib import Path
 import sys
 import numpy as np
-import pandas as pd
-import multiprocessing as mp
+# import pandas as pd
+# import multiprocessing as mp
 import logging
 
 import mne
 from mne.preprocessing import ICA, create_ecg_epochs, create_eog_epochs
+
+from utils import getPaths, getGoodButtonsEvents
 
 
 # Script to take raw MEG files from CamCAN and generate evoked response, with
@@ -68,26 +70,11 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
         if True, apply a Maxwell filter
         default is False (as Tim's file is pre-filtered)
 
+    Returns
+    -------
+    0
+
     """
-
-    # Script to create processed data for Motor blocks
-    # homeDir = Path(os.path.expanduser("~"))
-    homeDir = Path.home()
-    dataDir = homeDir / 'camcan'
-    behaviouralDir = dataDir / 'behaviouralData'
-    megDir = dataDir / 'megData_moveComp'
-    outDir = dataDir / 'proc_data' / 'TaskSensorAnalysis_transdef'
-    dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
-    demographicFile = dataDir / 'proc_data' / 'demographics_goodSubjects.csv'
-    # create folders
-    for pathDir in [behaviouralDir, megDir, outDir]:
-        pathDir.mkdir(parents=True, exist_ok=True)
-
-    # Path to cross talk and calibration files for Maxwell filter
-    ctSparseFile = dataDir / 'Cam-CAN_ct_sparse.fif'
-    sssCalFile = dataDir / 'Cam-CAN_sss_cal.dat'
-
-    plotOK = 0
 
     # Epoching parameters
     prestim = -1.7
@@ -95,12 +82,18 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
     baseStart = -1.25
     baseEnd = -1.0
 
-    ####################################################################
+    dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
 
-    # Files that exist
-    tsssFifDir = megDir / str(subjectID) / 'task'
-    if not tsssFifDir.exists():
-        tsssFifDir.mkdir(parents=True)
+    # ========== Define all file paths ===========
+
+    dictPaths = getPaths(subjectID)
+    dataDir = dictPaths['dataDir']
+    tsssFifDir = dictPaths['tsssFifDir']
+    subjectOutDir = dictPaths['procSubjectOutDir']
+
+    # Path to cross talk and calibration files for Maxwell filter
+    ctSparseFile = dataDir / 'Cam-CAN_ct_sparse.fif'
+    sssCalFile = dataDir / 'Cam-CAN_sss_cal.dat'
 
     if apply_maxwell_filter:
         tsssFifName = 'sub-' + str(subjectID) + '_ses-smt_task-smt_meg.fif'
@@ -112,21 +105,23 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
         sys.exit("Put %s file into %s folder." % (tsssFifName, tsssFifDir))
 
     # Files that get made
-    subjectOutDir = outDir / str(subjectID)
-    if not subjectOutDir.exists():
-        subjectOutDir.mkdir(parents=True)
+    # subjectOutDir = outDir / str(subjectID)
+    # if not subjectOutDir.exists():
+    #     subjectOutDir.mkdir(parents=True)
     icaFif = subjectOutDir / (dsPrefix + '-ica.fif')
-    eveFif_all = subjectOutDir / (dsPrefix + '-eve.fif')
-    eveFif_button = subjectOutDir / \
-        (dsPrefix + '_Under2SecResponseOnly-eve.fif')
-    # file with epochs
+    # eveFif_all = subjectOutDir / (dsPrefix + '-eve.fif')
+    # eveFif_button = subjectOutDir / \
+    #     (dsPrefix + '_Under2SecResponseOnly-eve.fif')
+    # file with epochs and evoked
     epochFif = subjectOutDir / \
         (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif')
     evokedFif = subjectOutDir / \
         (dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo-ave.fif')
-    # file for raw data
+    # file for cleaned raw data
     rawCleanFif = subjectOutDir / \
-        (dsPrefix + '_buttonPress_duration=3.4s_cleaned-raw.fif')
+        (dsPrefix + '_cleaned.fif')
+
+    ####################################################################
 
     # Setup log file for standarda output and error
     logFile = subjectOutDir / (dsPrefix + '_processing_notes.txt')
@@ -152,81 +147,28 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
                                                cross_talk=ctSparseFile,
                                                st_duration=10.0)
 
-    # Find button presses to stimuli
-    evs = mne.find_events(raw, 'STI101', shortest_event=1)
-    # Get stimuli and response latencies
-    # Pull event IDs
-    evtID = evs[:, 2]
-    # Get all events with ID < 10 (cues)
-    stimEvents = evs[np.where(evtID < 10)[0], :]
-    stimOnsets = stimEvents[:, 0]
-    # Get all events with ID > 10 (button press) - not always the same number
-    buttonEvents = evs[np.where(evtID > 10)[0], :]
-    # Make the button press event always have ID = 128
-    buttonOnsets = buttonEvents[:, 0]
-    buttonEvents[:, 2] = 128
-    # Stimulus loop to find the next button press under 2 seconds
-    goodButtonEvents = []
-    # Loop per cue
-    for thisStimSample in stimOnsets:
-        # Find timing of responses wrt stimulus
-        allRTs = buttonOnsets - thisStimSample
-        # Find where this timing is positive
-        positiveRTIndex = np.where(allRTs > 0)[0]
-        # If there is a positive response timing ...
-        if len(positiveRTIndex) > 0:
-            # And if that positive timing is less than 1 second ...
-            thisRT = allRTs[positiveRTIndex][0]/raw.info['sfreq']
-            if thisRT < 1:
-                # Then also check that this is the first button press, or the
-                # previous response was more than 3 seconds ago
-                thisButtonPressEvent = buttonEvents[positiveRTIndex[0], :]
-                thisOnset = thisButtonPressEvent[0]
-                relativeButtonSamples = buttonOnsets - thisOnset
-                priorBPIndex = np.where(relativeButtonSamples < 0)[0]
-                # If this is the first button press
-                if len(priorBPIndex) == 0:
-                    if len(goodButtonEvents) == 0:
-                        goodButtonEvents = thisButtonPressEvent
-                    else:
-                        goodButtonEvents = np.vstack(
-                            (goodButtonEvents, thisButtonPressEvent))
-                else:
-                    # If not, check the time from previous response
-                    samplesToPriorResponse = relativeButtonSamples[priorBPIndex[-1]]
-                    timeToPriorResponse = -1 * \
-                        samplesToPriorResponse/raw.info['sfreq']
-                    if timeToPriorResponse > 3:
-                        # Then either start a matrix with good button press
-                        # events, or add to it
-                        if len(goodButtonEvents) == 0:
-                            goodButtonEvents = thisButtonPressEvent
-                        else:
-                            goodButtonEvents = np.vstack(
-                                (goodButtonEvents, thisButtonPressEvent))
+    evs, goodButtonEvents = getGoodButtonsEvents(
+        raw, stim_channel='STI101', subtract_first_samp=True)
 
-    if len(goodButtonEvents) > 0:
-        # Drop duplicate events in the button press list
-        evs_df = pd.DataFrame(goodButtonEvents)
-        goodButtonEvents = evs_df.drop_duplicates().values
+    # # Drop duplicate events in the button press list
+    # evs_df = pd.DataFrame(goodButtonEvents)
+    # goodButtonEvents = evs_df.drop_duplicates().values
 
-        # Now drop button presses that are within 3 seconds of the previous
-        # button press
-        goodButtonInterval = np.diff(goodButtonEvents[:, 0])/raw.info['sfreq']
-        longDelay = np.where(goodButtonInterval > 3)[0]
+    # # Now drop button presses that are within 3 seconds of the previous
+    # # button press
+    # goodButtonInterval = np.diff(
+    #     goodButtonEvents[:, 0]) / raw.info['sfreq']
+    # longDelay = np.where(goodButtonInterval > 3)[0]
 
-        # Write out event files for all stimuli/responses and "good" button
-        # presses only
-        evs[:, 0] -= raw.first_samp
-        mne.write_events(eveFif_all, evs)
-        goodButtonEvents[:, 0] -= raw.first_samp
-        mne.write_events(eveFif_button, goodButtonEvents)
-    else:
-        print("No button event found.")
+    # # Write out event files for all stimuli/responses and "good" button
+    # # presses only
+    # mne.write_events(eveFif_all, evs)
+    # mne.write_events(eveFif_button, goodButtonEvents)
 
     # Epoch data based on buttone press
-    epochs = mne.Epochs(raw, np.array(goodButtonEvents), None, prestim,
-                        poststim, baseline=(baseStart, baseEnd),
+    epochs = mne.Epochs(raw, events=np.array(goodButtonEvents), event_id=None,
+                        tmin=prestim, tmax=poststim,
+                        baseline=(baseStart, baseEnd),
                         verbose=False, preload=True)
 
     # Load or generate ICA decomposition for this dataset
@@ -270,11 +212,10 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
     epochs_clean.save(epochFif, overwrite=True)
     # Average and save
     evoked = epochs_clean.average()
-    evoked.save(evokedFif, overwrite=True)
+    evoked.save(evokedFif)
     # Print some info
-    print(str(subjectID))
-    print(str(len(epochs)))
-    print(str(len(ica.exclude)))
+    print("Subject ID: %s\nEpochs length: %i\nICA exclude: %s" %
+          (str(subjectID), len(epochs), str(len(ica.exclude))))
 
     # Apply ICA to raw data	and save
     raw_clean = raw.copy()
@@ -303,7 +244,7 @@ if __name__ == '__main__':
     # subjectIDs = goodSubjects['SubjectID'].tolist()
 
     # # Set up the parallel task pool to use all available processors
-    # count = int(np.round(mp.cpu_count()*3/4))
+    # count = int(np.round(mp.cpu_count() * 3 / 4))
     # pool = mp.Pool(processes=count)
 
     # # Run the jobs
@@ -311,3 +252,5 @@ if __name__ == '__main__':
 
     MEG_preproc('CC620264', apply_maxwell_filter=True)
     # MEG_preproc('CC620262')
+
+# %%

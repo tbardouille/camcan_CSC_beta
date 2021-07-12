@@ -12,13 +12,17 @@ import mne
 CACHEDIR = Path('./__cache__')
 
 
-def getPaths(subjectID):
+def getPaths(subjectID, use_drago=False):
     """
 
     Parameters
     ----------
     subjectID : string
         the subject ID we are interested in
+
+    use_drago : bool
+        if True, return Paths for drago usage
+        default is False
 
     Returns
     -------
@@ -30,11 +34,18 @@ def getPaths(subjectID):
     # initialize Paths dictionary
     dictPaths = {}
 
-    homeDir = Path.home()
+    if use_drago:
+        homeDir = Path('/storage/store/work/callain/camcan_CSC_beta/')
+    else:
+        homeDir = Path.home()
     dataDir = homeDir / 'camcan'
     dictPaths['dataDir'] = dataDir
     # path to raw data
-    tsssFifDir = dataDir / 'megData_moveComp' / str(subjectID) / 'task'
+    if use_drago:
+        tsssFifDir = Path('/storage/store/data/camcan/BIDSsep/smt/'
+                          + ('sub-' + str(subjectID)) + '/ses-smt/meg/')
+    else:
+        tsssFifDir = dataDir / 'megData_moveComp' / str(subjectID) / 'task'
     dictPaths['tsssFifDir'] = tsssFifDir
     # path to save pre-processing data
     procSubjectOutDir = dataDir / 'proc_data' / \
@@ -45,11 +56,28 @@ def getPaths(subjectID):
     dictPaths['cscSubjectOutDir'] = cscSubjectOutDir
 
     # behaviouralDir = dataDir / 'behaviouralData'
-    # demographicFile = dataDir / 'proc_data' / 'demographics_goodSubjects.csv'
 
     for pathDir in dictPaths.values():
         # create directory if not already exists
         pathDir.mkdir(parents=True, exist_ok=True)
+
+    # Paths for files of interest
+    if use_drago:
+        ctSparseFile = Path(
+            '/storage/store/data/camcan-mne/Cam-CAN_ct_sparse.fif')
+        sssCalFile = Path(
+            '/storage/store/data/camcan-mne/Cam-CAN_sss_cal.dat')
+        participantsFile = Path(
+            '/storage/store/data/camcan/BIDSsep/smt/participants.tsv')
+    else:
+        ctSparseFile = dataDir / 'Cam-CAN_ct_sparse.fif'
+        sssCalFile = dataDir / 'Cam-CAN_sss_cal.dat'
+
+    dictPaths['ctSparseFile'] = ctSparseFile
+    dictPaths['sssCalFile'] = sssCalFile
+    dictPaths['participantsFile'] = participantsFile
+
+    # demographicFile = dataDir / 'proc_data' / 'demographics_goodSubjects.csv'
 
     return dictPaths
 
@@ -175,3 +203,18 @@ def getCSCPickleName(use_batch_cdl=True, use_greedy_cdl=False,
     pkl_name += '.pkl'
 
     return pkl_name
+
+
+def getSubjectAge(subjectID, use_drago=False):
+    """
+
+    """
+
+    dictPaths = getPaths(subjectID=subjectID, use_drago=use_drago)
+    participantsFile = dictPaths['participantsFile']
+    participants = pd.read_csv(participantsFile, sep='\t', header=0)
+
+    age = participants[participants['participant_id']
+                       == 'sub-' + str(subjectID)]['age'].iloc[0]
+
+    return age

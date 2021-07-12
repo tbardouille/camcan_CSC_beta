@@ -21,7 +21,7 @@ memory = Memory(CACHEDIR, verbose=0)
 def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             sfreq=150., sensorType='grad',
             use_batch_cdl=False, use_greedy_cdl=True,
-            reg=.2, eps=1e-4, tol_z=1e-2):
+            reg=.2, eps=1e-4, tol_z=1e-2, use_drago=False):
     """
 
     Parameters
@@ -73,7 +73,7 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
     assert (use_batch_cdl + use_greedy_cdl) == 1
 
-    dictPaths = getPaths(subjectID)
+    dictPaths = getPaths(subjectID, use_drago=use_drago)
     subjectInputDir = dictPaths['procSubjectOutDir']
     subjectOutputDir = dictPaths['cscSubjectOutDir']
 

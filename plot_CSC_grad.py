@@ -12,14 +12,14 @@ import matplotlib.pyplot as plt
 import mne
 from alphacsc.viz.epoch import make_epochs
 
-from utils import getPaths, getCSCPickleName
+from utils import getPaths, getCSCPickleName, getSubjectAge
 
 
 def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
              sfreq=150., sensorType='grad',
              use_batch_cdl=False, use_greedy_cdl=True,
              reg=.2, eps=1e-4, tol_z=1e-2,
-             activeStartTime=1.7, shift_acti=False):
+             activeStartTime=1.7, shift_acti=False, use_drago=False):
     """
 
     Parameters
@@ -81,7 +81,7 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
 
     dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
 
-    dictPaths = getPaths(subjectID)
+    dictPaths = getPaths(subjectID, use_drago=use_drago)
     subjectInputDir = dictPaths['procSubjectOutDir']
     subjectOutputDir = dictPaths['cscSubjectOutDir']
 
@@ -109,10 +109,13 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     zWindowDuration = int(np.round(zWindowDurationTime * sfreq))
 
     # Define figures names suffixes
-    figNameSuffix = '_' + pkl_name.replace('.pkl', '.pdf')
+    subjectAge = getSubjectAge(subjectID=subjectID, use_drago=use_drago)
+    figNameSuffix = '_' + pkl_name.replace('.pkl',
+                                           '_age' + str(subjectAge) + '.pdf')
 
     # # Plot time course for all atoms
-    # fig, axes = plt.subplots(5, 5, sharex=True, sharey=True, figsize=(11, 8.5))
+    # fig, axes = plt.subplots(5, 5, sharex=True, sharey=True,
+    #                          figsize=(11, 8.5))
     # for i_atom in range(n_atoms):
     #     ax = np.ravel(axes)[i_atom]
     #     v_hat = cdl.v_hat_[i_atom]
@@ -137,7 +140,8 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     # # first, make a time vector for the x-axis
     # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
     # # Then, plot each atom's Z
-    # fig, axes = plt.subplots(5, 5, sharex=True, sharey=True, figsize=(11, 8.5))
+    # fig, axes = plt.subplots(5, 5, sharex=True, sharey=True,
+    #                          figsize=(11, 8.5))
     # for i_atom in range(n_atoms):
     #     ax = np.ravel(axes)[i_atom]
     #     z_hat = cdl.z_hat_[:, i_atom, :]
@@ -151,7 +155,7 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     if cdl_on_epoch:
         allZ = z_hat_
     else:
-        # transform z_hat_ into epoched, with shape (n_events, n_atoms, duration)
+        # transform z_hat_ into epoched, with shape (n_events, n_atoms, n_tt)
         # file with good button events
         eveFif_button = subjectOutputDir / \
             (dsPrefix + '_Under2SecResponseOnly-eve.fif')
@@ -261,7 +265,9 @@ def plot_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             ax.set_ylabel("Atom's activations", labelpad=7, fontsize=fontsize)
 
     plt.tight_layout()
-    plt.savefig(subjectOutputDir / ('global_figure' + figNameSuffix), dpi=300)
+    fig_name = 'global_figure' + figNameSuffix
+    plt.savefig(subjectOutputDir / fig_name, dpi=300)
+    plt.savefig(subjectOutputDir / (fig_name.replace('.pdf', '.png')), dpi=300)
     # bbox_inches='tight')
     plt.close()
 

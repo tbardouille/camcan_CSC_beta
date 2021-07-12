@@ -59,7 +59,7 @@ class StreamToLogger(object):
             self.logger.log(self.log_level, line.rstrip())
 
 
-def MEG_preproc(subjectID, apply_maxwell_filter=False):
+def MEG_preproc(subjectID, apply_maxwell_filter=False, use_drago=False):
     """
 
     Parameters
@@ -72,7 +72,7 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
 
     Returns
     -------
-    0
+    None
 
     """
 
@@ -86,14 +86,14 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
 
     # ========== Define all file paths ===========
 
-    dictPaths = getPaths(subjectID)
+    dictPaths = getPaths(subjectID, use_drago=use_drago)
     dataDir = dictPaths['dataDir']
     tsssFifDir = dictPaths['tsssFifDir']
     subjectOutDir = dictPaths['procSubjectOutDir']
 
     # Path to cross talk and calibration files for Maxwell filter
-    ctSparseFile = dataDir / 'Cam-CAN_ct_sparse.fif'
-    sssCalFile = dataDir / 'Cam-CAN_sss_cal.dat'
+    ctSparseFile = dictPaths['ctSparseFile']
+    sssCalFile = dictPaths['sssCalFile']
 
     if apply_maxwell_filter:
         tsssFifName = 'sub-' + str(subjectID) + '_ses-smt_task-smt_meg.fif'
@@ -124,19 +124,19 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
     ####################################################################
 
     # Setup log file for standarda output and error
-    logFile = subjectOutDir / (dsPrefix + '_processing_notes.txt')
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(message)s',
-        filename=logFile,
-        filemode='a'
-    )
-    stdout_logger = logging.getLogger('STDOUT')
-    sl = StreamToLogger(stdout_logger, logging.INFO)
-    sys.stdout = sl
-    stderr_logger = logging.getLogger('STDERR')
-    sl = StreamToLogger(stderr_logger, logging.ERROR)
-    sys.stderr = sl
+    # logFile = subjectOutDir / (dsPrefix + '_processing_notes.txt')
+    # logging.basicConfig(
+    #     level=logging.DEBUG,
+    #     format='%(message)s',
+    #     filename=logFile,
+    #     filemode='a'
+    # )
+    # stdout_logger = logging.getLogger('STDOUT')
+    # sl = StreamToLogger(stdout_logger, logging.INFO)
+    # sys.stdout = sl
+    # stderr_logger = logging.getLogger('STDERR')
+    # sl = StreamToLogger(stderr_logger, logging.ERROR)
+    # sys.stderr = sl
 
     # Read raw data
     raw = mne.io.read_raw_fif(tsssFif, preload=True)
@@ -222,7 +222,7 @@ def MEG_preproc(subjectID, apply_maxwell_filter=False):
     ica.apply(raw_clean, exclude=ica.exclude)
     raw_clean.save(rawCleanFif, overwrite=True)
 
-    return 0
+    return None
 
 
 if __name__ == '__main__':
@@ -250,7 +250,7 @@ if __name__ == '__main__':
     # # Run the jobs
     # pool.map(MEG_preproc, subjectIDs)
 
-    MEG_preproc('CC620264', apply_maxwell_filter=True)
+    MEG_preproc('CC620264', apply_maxwell_filter=True, use_drago=True)
     # MEG_preproc('CC620262')
 
 # %%

@@ -12,7 +12,9 @@ from plot_CSC_grad import plot_csc
 # ========== Global parameters ==========
 # Fixed hyper-parameters
 use_drago = True
-subjectID = 'CC620264'
+# subjectID = 'CC620264'  # age: 76.33
+subjectID = 'CC110037'  # age: 18.75
+# subjectID = 'CC723395'  # age: 86.08
 apply_maxwell_filter = True  # in Tim's: False (already done on input data)
 cdl_on_epoch = False  # in Tim's: True
 n_atoms = 30  # in Tim's: 25
@@ -20,7 +22,7 @@ atomDuration = 0.7  # in Tim's: 0.5
 sfreq = 150.  # in Tim's: 300
 use_batch_cdl = False  # in Tim's: True
 use_greedy_cdl = True  # in Tim's: False
-reg = 0.3  # in Tim's: 0.2
+reg = 0.15  # in Tim's: 0.2
 eps = 1e-5  # in Tim's: 1e-4
 tol_z = 1e-3  # in Tim's: 1e-2
 activeStartTime = 1.7  # in Tim's: 1.7

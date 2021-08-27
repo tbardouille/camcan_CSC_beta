@@ -21,7 +21,9 @@ memory = Memory(CACHEDIR, verbose=0)
 def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             sfreq=150., sensorType='grad',
             use_batch_cdl=False, use_greedy_cdl=True,
-            reg=.2, eps=1e-4, tol_z=1e-2, use_drago=False):
+            reg=.2, eps=1e-4, tol_z=1e-2,
+            subtract_first_samp=False,
+            use_drago=False):
     """
 
     Parameters
@@ -63,6 +65,10 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
     tol_z : float
         stopping criteria for Z
         default is 1e-2
+
+    subtract_first_samp : bool
+        if True, substract raw.first_samp to goodButtonsEvents
+        default is False (as in Tim's code) 
 
 
     Returns
@@ -131,7 +137,8 @@ def run_csc(subjectID, cdl_on_epoch=True, n_atoms=25, atomDuration=0.7,
             sfreq, npad='auto', verbose=False, events=events)
 
         _, goodButtonEvents = getGoodButtonsEvents(
-            raw, stim_channel='STI101', subtract_first_samp=True)
+            raw, stim_channel='STI101',
+            subtract_first_samp=subtract_first_samp)
         mne.write_events(subjectOutputDir /
                          (dsPrefix + '_Under2SecResponseOnly-eve.fif'),
                          goodButtonEvents)

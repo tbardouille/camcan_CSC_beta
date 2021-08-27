@@ -8,12 +8,19 @@ from camcan_process_to_evoked_parallel import MEG_preproc
 from run_CSC_grad import run_csc
 from plot_CSC_grad import plot_csc
 
+###############################################################################
+# GLOBAL VARIABLES
+###############################################################################
+
+# Root path to raw BIDS files
+BIDS_ROOT = "/storage/store/data/camcan/BIDSsep/smt/"
+
 
 # ========== Global parameters ==========
 # Fixed hyper-parameters
 use_drago = True
-# subjectID = 'CC620264'  # age: 76.33
-subjectID = 'CC110037'  # age: 18.75
+subjectID = 'CC620264'  # age: 76.33
+# subjectID = 'CC110037'  # age: 18.75
 # subjectID = 'CC723395'  # age: 86.08
 apply_maxwell_filter = True  # in Tim's: False (already done on input data)
 cdl_on_epoch = False  # in Tim's: True
@@ -22,11 +29,12 @@ atomDuration = 0.7  # in Tim's: 0.5
 sfreq = 150.  # in Tim's: 300
 use_batch_cdl = False  # in Tim's: True
 use_greedy_cdl = True  # in Tim's: False
-reg = 0.15  # in Tim's: 0.2
+reg = 0.2  # in Tim's: 0.2
 eps = 1e-5  # in Tim's: 1e-4
 tol_z = 1e-3  # in Tim's: 1e-2
 activeStartTime = 1.7  # in Tim's: 1.7
 shift_acti = True  # in Tim's: False
+subtract_first_samp = False
 
 # # Parameters to vary
 # list_n_atoms = [30]
@@ -47,7 +55,9 @@ def procedure(comb):
     run_csc(subjectID=subjectID, cdl_on_epoch=cdl_on_epoch, n_atoms=n_atoms,
             atomDuration=atomDuration, sfreq=sfreq,
             use_batch_cdl=use_batch_cdl, use_greedy_cdl=use_greedy_cdl,
-            reg=reg, eps=eps, tol_z=tol_z, use_drago=use_drago)
+            reg=reg, eps=eps, tol_z=tol_z,
+            subtract_first_samp=subtract_first_samp,
+            use_drago=use_drago)
     # plot and save results
     plot_csc(subjectID=subjectID, cdl_on_epoch=cdl_on_epoch, n_atoms=n_atoms,
              atomDuration=atomDuration, sfreq=sfreq,

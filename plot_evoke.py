@@ -48,13 +48,13 @@ raw, events = raw.resample(
     sfreq, npad='auto', verbose=False, events=events)
 
 _, goodButtonEvents = getGoodButtonsEvents(
-    raw, stim_channel='STI101', subtract_first_samp=True)
+    raw, stim_channel='STI101', subtract_first_samp=False)
 
-epochs_events = np.concatenate((events, goodButtonEvents))
+# epochs_events = np.concatenate((events, goodButtonEvents))
 event_dict = {'audiovis/300Hz': 1, 'audiovis/600Hz': 2, 'audiovis/1200Hz': 3,
-              'catch/0': 4, 'catch/1': 5, 'button': 8192, 'good_button': 128}
+              'catch/0': 4, 'catch/1': 5, 'button': 8192}  # , 'good_button': 128}
 # Epoch data based on buttone press
-epochs = mne.Epochs(raw, events=epochs_events, event_id=event_dict,
+epochs = mne.Epochs(raw, events=events, event_id=event_dict,
                     tmin=prestim, tmax=poststim,
                     baseline=(baseStart, baseEnd),
                     verbose=False, preload=True)
@@ -71,7 +71,11 @@ fig.savefig('evoked_button.png')
 fig.savefig('evoked_button.pdf')
 fig.clear()
 # only "good" button events
-evoked_good_button = epochs['good_button'].average()
+epochs = mne.Epochs(raw, events=goodButtonEvents, event_id=None,
+                    tmin=prestim, tmax=poststim,
+                    baseline=(baseStart, baseEnd),
+                    verbose=False, preload=True)
+evoked_good_button = epochs.average()
 fig = evoked_good_button.plot_joint()
 fig.savefig('evoked_good_button.png')
 fig.savefig('evoked_good_button.pdf')

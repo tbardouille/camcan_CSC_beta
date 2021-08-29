@@ -32,11 +32,13 @@ figure plot.
 import pandas as pd
 import numpy as np
 import logging
+import itertools
 from pathlib import Path
 from joblib import Memory
 from scipy.signal import tukey
 import scipy.stats as ss
 import matplotlib.pyplot as plt
+from joblib import Parallel, delayed
 
 import mne
 from mne_bids import BIDSPath, read_raw_bids
@@ -454,6 +456,54 @@ def run_csc(subject_id, apply_maxwell_filter=True, apply_ica_cleaning=False,
 
     return res
 
+###############################################################################
+# RUN MULTIPLE CDL MODEL IN PARALLEL
+###############################################################################
+
+
+def procedure(exp_params, activeStartTime=1.7, shift_acti=False):
+    """XXX
+
+    Parameters
+    ----------
+    exp_params : dict
+        dictionary of parameters used to run CSC model
+
+    activeStartTime : float
+        default is 1.7
+
+
+    shift_acti : bool
+        if True, the activations time are shifted to make them correspond to 
+        the peak amplitude time in the atom (maximum, in absolute value, of
+        the temporal atom’s representation)
+        default is False
+
+    Returns
+    -------
+
+    """
+
+    plot_csc(exp_params, activeStartTime=activeStartTime,
+             shift_acti=shift_acti)
+
+
+def run_multiple_csc(params_to_vary, n_jobs=6):
+    """
+
+    Parameters
+    ----------
+    params_to_vary : dict of lists
+        dictionry of parameters to vary
+        keys are 
+
+    """
+
+    combs = itertools.product(list_n_atoms, list_reg)
+    # Run pipeline in parallel
+    print("Run parallel")
+    res = Parallel(n_jobs=n_jobs, verbose=1)(delayed(procedure)(this_comb)
+                                             for this_comb in combs)
 
 ###############################################################################
 # RUN DRIPP MODEL ON EXTRACTED ATOMS

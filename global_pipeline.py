@@ -35,6 +35,14 @@ exp_params = {'subject_id': 'CC620264',
 plot_csc(exp_params, activeStartTime=1.7, shift_acti=False)
 
 
+params_to_vary = {
+    'atom_duration': [0.5, 0.7, 0.9],
+    'n_atoms': [20, 25, 30],
+    'reg': [0.1, 0.15, 0.2]
+}
+# %%
+# %%
+
 # # Parameters to vary
 # list_n_atoms = [30]
 # list_reg = [0.1]

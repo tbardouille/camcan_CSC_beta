@@ -41,7 +41,6 @@ params_to_vary = {
     'reg': [0.1, 0.15, 0.2]
 }
 # %%
-# %%
 
 # # Parameters to vary
 # list_n_atoms = [30]

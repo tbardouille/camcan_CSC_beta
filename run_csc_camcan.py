@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from joblib import Memory
 import mne
 from mne_bids import BIDSPath, read_raw_bids
 from alphacsc import BatchCDL, GreedyCDL
@@ -24,12 +25,13 @@ if len(sys.argv) > 1:  # get subject_id from command line
     subject_id = participants.iloc[subject_id_idx]['participant_id']
     subject_id = subject_id.split('-')[1]
 
+mem = Memory('.')
+
 print(f'Running CSC pipeline on : {subject_id}')
 
 # %% Parameters
 ch_type = "grad"  # run CSC
 sfreq = 150.
-use_batch_cdl = False
 
 # Epoching parameters
 tmin = -1.7
@@ -67,6 +69,8 @@ cdl_params = {
     'sort_atoms': True,
     'verbose': 1,
     'random_state': 0,
+    'use_batch_cdl': False,
+    'n_splits': 10,
     'n_jobs': 5
 }
 
@@ -127,21 +131,32 @@ raw_csc, events = raw_csc.resample(
     sfreq, npad='auto', verbose=False, events=epochs.events)
 
 X = raw_csc.get_data(picks=['meg'])
-X_splits = split_signal(X, n_splits=10, apply_window=True)
 
 # %% Run multivariate CSC
 print('Computing CSC')
 
-if use_batch_cdl:
-    cdl_model = BatchCDL(**cdl_params)
-else:
-    cdl_model = GreedyCDL(**cdl_params)
 
-# Fit the model and learn rank1 atoms
-print('Running CSC')
-cdl_model.fit(X_splits)
+@mem.cache
+def run_csc(X, **cdl_params):
+    cdl_params = dict(cdl_params)
+    n_splits = cdl_params.pop('n_splits')
+    use_batch_cdl = cdl_params.pop('use_batch_cdl')
+    if use_batch_cdl:
+        cdl_model = BatchCDL(**cdl_params)
+    else:
+        cdl_model = GreedyCDL(**cdl_params)
 
-z_hat_ = cdl_model.transform(X[None, :])
+    X_splits = split_signal(X, n_splits=n_splits, apply_window=True)
+
+    # Fit the model and learn rank1 atoms
+    print('Running CSC')
+    cdl_model.fit(X_splits)
+
+    z_hat_ = cdl_model.transform(X[None, :])
+    return cdl_model, z_hat_
+
+
+cdl_model, z_hat_ = run_csc(X, **cdl_params)
 
 # %% Get and plot CSC results
 
@@ -161,11 +176,11 @@ allZ = make_epochs(
 )
 
 fontsize = 12
-n_atoms = exp_params['n_atoms']
+n_atoms_est = z_hat_.shape[1]
 n_atoms_per_fig = 5
 figsize = (15, 7)
 
-atoms_in_figs = np.arange(0, n_atoms + 1, n_atoms_per_fig)
+atoms_in_figs = np.arange(0, n_atoms_est + 1, n_atoms_per_fig)
 atoms_in_figs = list(zip(atoms_in_figs[:-1], atoms_in_figs[1:]))
 
 for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, 1):
@@ -200,7 +215,7 @@ for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, 1):
         ax.set_xlabel("Frequencies (Hz)", fontsize=fontsize)
         ax.grid(True)
         if i_atom == 0:
-            ax.set_ylabel("Power Spectral Density", labelpad=13, 
+            ax.set_ylabel("Power Spectral Density", labelpad=13,
                           fontsize=fontsize)
 
         # Atom's activations
@@ -223,7 +238,8 @@ for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, 1):
 
         fig_name = f"atoms_part_{fig_idx}.pdf"
         fig.savefig(subject_output_dir / fig_name, dpi=300)
-        # fig.savefig(subject_output_dir / (fig_name.replace(".pdf", ".png")), dpi=300)
+        # fig.savefig(subject_output_dir / (fig_name.replace(".pdf", ".png")),
+        # dpi=300)
         # fig.close()
 
 plt.show()

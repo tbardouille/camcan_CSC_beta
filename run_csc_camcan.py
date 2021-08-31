@@ -1,5 +1,7 @@
+import sys
 from pathlib import Path
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import mne
 from mne_bids import BIDSPath, read_raw_bids
@@ -11,14 +13,35 @@ DATA_DIR = Path("/storage/store/data/")
 BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
 SSS_CAL_FILE = DATA_DIR / "camcan-mne/Cam-CAN_sss_cal.dat"
 CT_SPARSE_FILE = DATA_DIR / "camcan-mne/Cam-CAN_ct_sparse.fif"
+PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
 
+participants = pd.read_csv(PARTICIPANTS_FILE, sep='\t', header=0)
+
+subject_id = "CC620264"
+
+if len(sys.argv) > 1:  # get subject_id from command line
+    subject_id_idx = int(sys.argv[1])
+    subject_id = participants.iloc[subject_id_idx]['participant_id']
+    subject_id = subject_id.split('-')[1]
+
+print(f'Running CSC pipeline on : {subject_id}')
+
+# %% Parameters
 ch_type = "grad"  # run CSC
 sfreq = 150.
 use_batch_cdl = False
 
+# Epoching parameters
+tmin = -1.7
+tmax = 1.7
+baseline = (-1.25, -1.0)
+
+activation_tstart = -tmin
+shift_acti = False
+
 exp_params = {
-    "subject_id": "CC620264",
-    "sfreq": 150.0,  # in Tim's: 300
+    "subject_id": subject_id,
+    "sfreq": sfreq,  # in Tim's: 300
     "atom_duration": 0.7,  # in Tim's: 0.5,
     "n_atoms": 30,  # in Tim's: 25,
     "reg": 0.2,  # in Tim's: 0.2,
@@ -28,24 +51,27 @@ exp_params = {
 
 HOME_DIR = Path('.')
 
-activation_tstart = 1.7
-shift_acti = False
-
-# [seconds from start of trial, i.e., -1.7 seconds wrt cue]
-# sfreq = exp_params.get("sfreq", 150.0)
-# preStimStartTime = 0
-# zWindowDurationTime = 0.5  # in seconds
-# preStimStart = int(np.round(preStimStartTime * sfreq))
-# activeStart = int(np.round(activation_tstart * sfreq))
-# zWindowDuration = int(np.round(zWindowDurationTime * sfreq))
-
-# Define figures names suffixes
-subject_id = exp_params["subject_id"]
-# subject_age = get_subject_age(subject_id=subject_id)
-# figNameSuffix = get_exp_name(**exp_params) + "_age" + str(subject_age) + ".pdf"
+cdl_params = {
+    'n_atoms': exp_params['n_atoms'],
+    'n_times_atom': int(np.round(exp_params['atom_duration'] * sfreq)),
+    'rank1': True, 'uv_constraint': 'separate',
+    'window': True,  # in Tim's: False
+    'unbiased_z_hat': True,  # in Tim's: False
+    'D_init': 'chunk',
+    'lmbd_max': 'scaled', 'reg': exp_params['reg'],
+    'n_iter': 100, 'eps': exp_params['eps'],
+    'solver_z': 'lgcd',
+    'solver_z_kwargs': {'tol': exp_params['tol_z'], 'max_iter': 1000},
+    'solver_d': 'alternate_adaptive',
+    'solver_d_kwargs': {'max_iter': 300},
+    'sort_atoms': True,
+    'verbose': 1,
+    'random_state': 0,
+    'n_jobs': 5
+}
 
 # Create folder to save results
-subject_output_dir = HOME_DIR / "results" / str(subject_id)
+subject_output_dir = HOME_DIR / "results" / subject_id
 subject_output_dir.mkdir(parents=True, exist_ok=True)
 
 # %%
@@ -67,11 +93,6 @@ raw.notch_filter([50, 100])
 raw = mne.preprocessing.maxwell_filter(raw, calibration=SSS_CAL_FILE,
                                        cross_talk=CT_SPARSE_FILE,
                                        st_duration=10.0)
-
-# Epoching parameters
-tmin = -1.7
-tmax = 1.7
-baseline = (-1.25, -1.0)
 
 # %% Now deal with Epochs
 
@@ -95,9 +116,7 @@ epochs = mne.Epochs(
 
 epochs = epochs["event_name == 'button' and audiovis > -3."]
 
-# %% Run CSC on Raw
-
-1/0
+# %% Setup CSC on Raw
 
 raw_csc = raw.copy()  # make a copy to run CSC on ch_type
 raw_csc.pick([ch_type, 'stim'])
@@ -110,40 +129,8 @@ raw_csc, events = raw_csc.resample(
 X = raw_csc.get_data(picks=['meg'])
 X_splits = split_signal(X, n_splits=10, apply_window=True)
 
-# Define the parameters for multivariate CSC
-print('Building CSC')
-cdl_params = {
-    # Shape of the dictionary
-    'n_atoms': exp_params['n_atoms'],
-    # compute length of an atom, in timestamps
-    'n_times_atom': int(np.round(exp_params['atom_duration'] * sfreq)),
-    # Request a rank1 dictionary with unit norm temporal and spatial maps
-    'rank1': True, 'uv_constraint': 'separate',
-    # Apply a temporal window reparametrization
-    'window': True,  # in Tim's: False
-    # At the end, refit the activations with fixed support
-    # and no reg to unbias
-    'unbiased_z_hat': True,  # in Tim's: False
-    # Initialize the dictionary with random chunk from the data
-    'D_init': 'chunk',
-    # Rescale the regularization parameter to be 20% of lambda_max
-    'lmbd_max': 'scaled', 'reg': exp_params['reg'],
-    # Number of iteration for the alternate minimization and cvg threshold
-    'n_iter': 100, 'eps': exp_params['eps'],
-    # Solver for the z-step
-    'solver_z': 'lgcd',
-    'solver_z_kwargs': {'tol': exp_params['tol_z'],
-                        'max_iter': 1000},
-    # Solver for the d-step
-    'solver_d': 'alternate_adaptive',
-    'solver_d_kwargs': {'max_iter': 300},
-    # Sort atoms by explained variances
-    'sort_atoms': True,
-    # Technical parameters
-    'verbose': 1,
-    'random_state': 0,
-    'n_jobs': 5
-}
+# %% Run multivariate CSC
+print('Computing CSC')
 
 if use_batch_cdl:
     cdl_model = BatchCDL(**cdl_params)
@@ -156,11 +143,12 @@ cdl_model.fit(X_splits)
 
 z_hat_ = cdl_model.transform(X[None, :])
 
-# %% get effective n_atoms
+# %% Get and plot CSC results
+
+print("Get CSC results")
 
 events_no_first_samp = events.copy()
 events_no_first_samp[:, 0] -= raw_csc.first_samp
-print("Get CSC results")
 info = raw_csc.info.copy()
 info["events"] = events_no_first_samp
 info["event_id"] = None
@@ -172,9 +160,6 @@ allZ = make_epochs(
     n_times_atom=int(np.round(atom_duration * sfreq)),
 )
 
-print("allZ shape:", allZ.shape)
-
-# fontsize = 16
 fontsize = 12
 n_atoms = exp_params['n_atoms']
 n_atoms_per_fig = 5

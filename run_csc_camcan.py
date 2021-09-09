@@ -1,3 +1,4 @@
+# %%
 import sys
 from pathlib import Path
 import numpy as np
@@ -27,7 +28,7 @@ if len(sys.argv) > 1:  # get subject_id from command line
 
 mem = Memory('.')
 
-print(f'Running CSC pipeline on : {subject_id}')
+print(f'Running CSC pipeline on: {subject_id}')
 
 # %% Parameters
 ch_type = "grad"  # run CSC
@@ -39,7 +40,7 @@ tmax = 1.7
 baseline = (-1.25, -1.0)
 
 activation_tstart = -tmin
-shift_acti = False
+shift_acti = False  # put activation to the peak amplitude time in the atom
 
 exp_params = {
     "subject_id": subject_id,
@@ -78,7 +79,7 @@ cdl_params = {
 subject_output_dir = HOME_DIR / "results" / subject_id
 subject_output_dir.mkdir(parents=True, exist_ok=True)
 
-# %%
+# %% Read raw data from BIDS file
 bp = BIDSPath(
     root=BIDS_ROOT,
     subject=subject_id,
@@ -101,7 +102,14 @@ raw = mne.preprocessing.maxwell_filter(raw, calibration=SSS_CAL_FILE,
 # %% Now deal with Epochs
 
 all_events, all_event_id = mne.events_from_annotations(raw)
+# all_event_id = {'audiovis/1200Hz': 1,
+#                 'audiovis/300Hz': 2,
+#                 'audiovis/600Hz': 3,
+#                 'button': 4,
+#                 'catch/0': 5,
+#                 'catch/1': 6}
 
+# for every button event,
 metadata_tmin, metadata_tmax = -3., 0
 row_events = ['button']
 keep_last = ['audiovis']
@@ -118,7 +126,16 @@ epochs = mne.Epochs(
     preload=True, verbose=False
 )
 
-epochs = epochs["event_name == 'button' and audiovis > -3."]
+# "good" button events in Tim's:
+# button event is at most one sec. after an audiovis event,
+# and with at least 3 sec. between 2 button events.
+epochs = epochs["event_name == 'button' and audiovis > -1. and button == 0."]
+# epochs = epochs["event_name == 'button' and audiovis > -3."]
+
+# XXX
+if True:
+    epochs.average().plot()
+    # XXX save if needed
 
 # %% Setup CSC on Raw
 
@@ -162,6 +179,7 @@ cdl_model, z_hat_ = run_csc(X, **cdl_params)
 
 print("Get CSC results")
 
+# events here are only "good" button events
 events_no_first_samp = events.copy()
 events_no_first_samp[:, 0] -= raw_csc.first_samp
 info = raw_csc.info.copy()
@@ -183,7 +201,7 @@ figsize = (15, 7)
 atoms_in_figs = np.arange(0, n_atoms_est + 1, n_atoms_per_fig)
 atoms_in_figs = list(zip(atoms_in_figs[:-1], atoms_in_figs[1:]))
 
-for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, 1):
+for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, start=1):
     fig, axes = plt.subplots(4, n_atoms_per_fig, figsize=figsize)
 
     for i_atom, kk in enumerate(range(atoms_start, atoms_stop)):
@@ -238,8 +256,8 @@ for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, 1):
 
         fig_name = f"atoms_part_{fig_idx}.pdf"
         fig.savefig(subject_output_dir / fig_name, dpi=300)
-        # fig.savefig(subject_output_dir / (fig_name.replace(".pdf", ".png")),
-        # dpi=300)
+        fig.savefig(subject_output_dir / (fig_name.replace(".pdf", ".png")),
+                    dpi=300)
         # fig.close()
 
 plt.show()

@@ -1,22 +1,52 @@
 """
 
 """
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt
+
+import mne
 
 
-def plot_csc():
+def plot_csc(n_atoms_est, atom_duration, cdl_model, info, sfreq=150.,
+             plot_acti_histo=False, allZ=[], shift_acti=True,
+             activation_tstart=1.7, save_dir=Path('.')):
     """
+
+    Parameters
+    ----------
+    n_atoms_est : int
+
+    atom_duration : 
+
+    cdl_model : 
+
+    info
+
+    sfreq
+
+    plot_acti_histo : bool
+
+    allZ : 
+
+    shift_acti : bool
+
+
+    save_dir : instance of pathlib.Path
+        path to saving directory
 
     """
     fontsize = 12
-    n_atoms_est = z_hat_.shape[1]
     n_atoms_per_fig = 5
+    n_plot_per_atom = 3 + plot_acti_histo
     figsize = (15, 7)
 
     atoms_in_figs = np.arange(0, n_atoms_est + 1, n_atoms_per_fig)
     atoms_in_figs = list(zip(atoms_in_figs[:-1], atoms_in_figs[1:]))
 
     for fig_idx, (atoms_start, atoms_stop) in enumerate(atoms_in_figs, start=1):
-        fig, axes = plt.subplots(4, n_atoms_per_fig, figsize=figsize)
+        fig, axes = plt.subplots(
+            n_plot_per_atom, n_atoms_per_fig, figsize=figsize)
 
         for i_atom, kk in enumerate(range(atoms_start, atoms_stop)):
             ax = axes[0, i_atom]
@@ -50,29 +80,30 @@ def plot_csc():
                 ax.set_ylabel("Power Spectral Density", labelpad=13,
                               fontsize=fontsize)
 
-            # Atom's activations
-            ax = axes[3, i_atom]
-            z_hat = allZ[:, i_atom, :]
-            if shift_acti:
-                # roll to put activation to the peak amplitude time in the atom
-                shift = np.argmax(np.abs(cdl_model.v_hat_[i_atom]))
-                z_hat = np.roll(z_hat, shift, axis=1)
-                z_hat[:, :shift] = 0  # pad with 0
-            # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
-            t1 = np.arange(allZ.shape[2]) / sfreq - activation_tstart
-            ax.plot(t1, z_hat.T)
-            ax.set_xlabel("Time (s)", fontsize=fontsize)
+            if plot_acti_histo:
+                # Atom's activations
+                ax = axes[3, i_atom]
+                z_hat = allZ[:, i_atom, :]
+                if shift_acti:
+                    # roll to put activation to the peak amplitude time in the atom
+                    shift = np.argmax(np.abs(cdl_model.v_hat_[i_atom]))
+                    z_hat = np.roll(z_hat, shift, axis=1)
+                    z_hat[:, :shift] = 0  # pad with 0
+                # t1 = np.arange(cdl.z_hat_.shape[2]) / sfreq - 1.7
+                t1 = np.arange(allZ.shape[2]) / sfreq - activation_tstart
+                ax.plot(t1, z_hat.T)
+                ax.set_xlabel("Time (s)", fontsize=fontsize)
 
-            if i_atom == 0:
-                ax.set_ylabel("Atom's activations",
-                              labelpad=7, fontsize=fontsize)
+                if i_atom == 0:
+                    ax.set_ylabel("Atom's activations",
+                                  labelpad=7, fontsize=fontsize)
 
             fig.tight_layout()
 
             fig_name = f"atoms_part_{fig_idx}.pdf"
-            fig.savefig(subject_output_dir / fig_name, dpi=300)
-            fig.savefig(subject_output_dir / (fig_name.replace(".pdf", ".png")),
+            fig.savefig(save_dir / fig_name, dpi=300)
+            fig.savefig(save_dir / (fig_name.replace(".pdf", ".png")),
                         dpi=300)
             # fig.close()
 
-    plt.show()
+    # plt.show()

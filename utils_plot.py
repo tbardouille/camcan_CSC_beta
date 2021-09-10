@@ -100,10 +100,10 @@ def plot_csc(cdl_model, raw_csc, allZ,
             if plot_acti_histo:
                 # Atom's activations
                 ax = axes[3, i_atom]
-                z_hat = allZ[:, i_atom, :]
+                z_hat = allZ[:, kk, :]
                 if shift_acti:
                     # roll to put activation to the peak amplitude time
-                    shift = np.argmax(np.abs(cdl_model.v_hat_[i_atom]))
+                    shift = np.argmax(np.abs(v_hat))
                     z_hat = np.roll(z_hat, shift, axis=1)
                     z_hat[:, :shift] = 0  # pad with 0
                 t1 = np.arange(allZ.shape[2]) / sfreq - activation_tstart

@@ -1,6 +1,7 @@
 """
 
 """
+# %%
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,13 +11,13 @@ import mne
 
 def plot_csc(cdl_model, raw_csc, allZ,
              plot_acti_histo=False, shift_acti=True,
-             activation_tstart=1.7, save_dir=Path('.'),
+             activation_tstart=0, save_dir=Path('.'), title=None,
              show=True):
     """Plot the returns of CSC model.
 
     Parameters
     ----------
-    cdl_model : XXX
+    cdl_model : instance of alphacsc.ConvolutionalDictionaryLearning
 
     raw_csc : mne.io.Raw
         The raw data on which CDL was run.
@@ -26,12 +27,17 @@ def plot_csc(cdl_model, raw_csc, allZ,
     plot_acti_histo : bool
 
     shift_acti : bool
+        if True, roll to put activation to the peak amplitude time in the atom
 
     activation_tstart : float
         XXX I don't like you hard code 1.7 here.
+        default is 0
 
     save_dir : instance of pathlib.Path
         path to saving directory
+
+    title : str
+        title to put on figure
 
     show : bool
         Show figures at the end or not.
@@ -48,7 +54,7 @@ def plot_csc(cdl_model, raw_csc, allZ,
     info = raw_csc.info
     sfreq = raw_csc.info['sfreq']
     atom_duration = cdl_model.v_hat_.shape[-1] / raw_csc.info['sfreq']
-    figsize = (15, 7)
+    figsize = (15, 10)
 
     atoms_in_figs = np.arange(0, n_atoms_est + 1, n_atoms_per_fig)
     atoms_in_figs = list(zip(atoms_in_figs[:-1], atoms_in_figs[1:]))
@@ -58,7 +64,7 @@ def plot_csc(cdl_model, raw_csc, allZ,
         fig, axes = plt.subplots(
             n_plot_per_atom, n_atoms_per_fig, figsize=figsize)
         figs.append(fig)
-
+        fig.suptitle(title, fontsize=fontsize)
         for i_atom, kk in enumerate(range(atoms_start, atoms_stop)):
             ax = axes[0, i_atom]
             ax.set_title("Atom #" + str(kk), fontsize=fontsize)
@@ -96,7 +102,7 @@ def plot_csc(cdl_model, raw_csc, allZ,
                 ax = axes[3, i_atom]
                 z_hat = allZ[:, i_atom, :]
                 if shift_acti:
-                    # roll to put activation to the peak amplitude time in the atom
+                    # roll to put activation to the peak amplitude time
                     shift = np.argmax(np.abs(cdl_model.v_hat_[i_atom]))
                     z_hat = np.roll(z_hat, shift, axis=1)
                     z_hat[:, :shift] = 0  # pad with 0
@@ -109,6 +115,7 @@ def plot_csc(cdl_model, raw_csc, allZ,
                                   labelpad=7, fontsize=fontsize)
 
             fig.tight_layout()
+            fig.subplots_adjust(top=0.88)
 
             fig_name = f"atoms_part_{fig_idx}.pdf"
             fig.savefig(save_dir / fig_name, dpi=300)
@@ -118,3 +125,5 @@ def plot_csc(cdl_model, raw_csc, allZ,
     if show:
         plt.show()
     return figs
+
+# %%

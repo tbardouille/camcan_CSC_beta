@@ -21,16 +21,22 @@ mem = Memory('.')
 
 participants = pd.read_csv(PARTICIPANTS_FILE, sep='\t', header=0)
 
-subject_id = "CC620264"
+# subject_id = "CC620264"
+subject_id = "CC320428"
 
 if len(sys.argv) > 1:  # get subject_id from command line
-    subject_id_idx = int(sys.argv[1])
-    subject_id = participants.iloc[subject_id_idx]['participant_id']
-    subject_id = subject_id.split('-')[1]
+    try:
+        subject_id_idx = int(sys.argv[1])
+        subject_id = participants.iloc[subject_id_idx]['participant_id']
+        subject_id = subject_id.split('-')[1]
+    except ValueError:
+        pass
 
-# mem = Memory('.')
+age, sex = participants[participants['participant_id']
+                        == 'sub-' + str(subject_id)][['age', 'sex']].iloc[0]
 
-print(f'Running CSC pipeline on: {subject_id}')
+print(f'Running CSC pipeline on: {subject_id}, {str(age)} year old {sex}')
+fig_title = f'Subject {subject_id}, {str(age)} year old {sex}'
 
 # %% Parameters
 ch_type = "grad"  # run CSC
@@ -181,4 +187,7 @@ plot_csc(cdl_model=cdl_model,
          allZ=allZ,
          plot_acti_histo=True,
          activation_tstart=activation_tstart,
-         save_dir=subject_output_dir)
+         save_dir=subject_output_dir,
+         title=fig_title)
+
+# %%

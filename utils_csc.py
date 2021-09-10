@@ -2,15 +2,10 @@
 Utils scripts for
 """
 
-from joblib import Memory
-
 from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 
-mem = Memory('.')
 
-
-@mem.cache
 def run_csc(X, **cdl_params):
     """
 

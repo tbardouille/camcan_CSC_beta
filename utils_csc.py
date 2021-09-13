@@ -42,3 +42,9 @@ def run_csc(X, **cdl_params):
 
     z_hat_ = cdl_model.transform(X[None, :])
     return cdl_model, z_hat_
+
+
+def reconstruct_signal_from_atoms(cdl_model, z_hat_):
+    """
+
+    """

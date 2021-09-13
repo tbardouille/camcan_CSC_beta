@@ -3,7 +3,9 @@ import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from joblib import Memory
+from joblib import Memory, hash
+import json
+
 import mne
 from mne_bids import BIDSPath, read_raw_bids
 from alphacsc.viz.epoch import make_epochs
@@ -21,8 +23,7 @@ mem = Memory('.')
 
 participants = pd.read_csv(PARTICIPANTS_FILE, sep='\t', header=0)
 
-# subject_id = "CC620264"
-subject_id = "CC320428"
+subject_id = "CC620264"
 
 if len(sys.argv) > 1:  # get subject_id from command line
     try:
@@ -78,14 +79,20 @@ cdl_params = {
     'sort_atoms': True,
     'verbose': 1,
     'random_state': 0,
-    'use_batch_cdl': False,
+    'use_batch_cdl': True,
     'n_splits': 10,
     'n_jobs': 5
 }
 
-# Create folder to save results
+# Create folder to save results for the considered subject
 subject_output_dir = HOME_DIR / "results" / subject_id
 subject_output_dir.mkdir(parents=True, exist_ok=True)
+# Create folder to save final figures for a particular set of parameters
+exp_output_dir = subject_output_dir / hash([exp_params, cdl_params])
+exp_output_dir.mkdir(parents=True, exist_ok=True)
+# Save experiment parameters
+with open(exp_output_dir / 'exp_params', 'w') as fp:
+    json.dump([exp_params, cdl_params], fp, sort_keys=True, indent=4)
 
 # %% Read raw data from BIDS file
 bp = BIDSPath(
@@ -187,7 +194,7 @@ plot_csc(cdl_model=cdl_model,
          allZ=allZ,
          plot_acti_histo=True,
          activation_tstart=activation_tstart,
-         save_dir=subject_output_dir,
+         save_dir=exp_output_dir,
          title=fig_title)
 
 # %%

@@ -8,11 +8,13 @@ import matplotlib.pyplot as plt
 
 import mne
 
+from dripp.trunc_norm_kernel.model import TruncNormKernel
+
 
 def plot_csc(cdl_model, raw_csc, allZ,
              plot_acti_histo=False, shift_acti=True,
-             activation_tstart=0, save_dir=Path('.'), title=None,
-             show=True):
+             activation_tstart=0, df_dripp=None,
+             save_dir=Path('.'), title=None, show=True):
     """Plot the returns of CSC model.
 
     Parameters
@@ -33,6 +35,10 @@ def plot_csc(cdl_model, raw_csc, allZ,
         XXX I don't like you hard code 1.7 here.
         default is 0
 
+    df_dripp : pandas.DataFrame
+        possible DriPP results
+        default is None
+
     save_dir : instance of pathlib.Path
         path to saving directory
 
@@ -49,7 +55,7 @@ def plot_csc(cdl_model, raw_csc, allZ,
     """
     fontsize = 12
     n_atoms_per_fig = 5
-    n_plot_per_atom = 3 + plot_acti_histo
+    n_plot_per_atom = 3 + plot_acti_histo + (df_dripp is not None)
     n_atoms_est = allZ.shape[1]
     info = raw_csc.info
     sfreq = raw_csc.info['sfreq']
@@ -113,6 +119,34 @@ def plot_csc(cdl_model, raw_csc, allZ,
                 if i_atom == 0:
                     ax.set_ylabel("Atom's activations",
                                   labelpad=7, fontsize=fontsize)
+
+            if (df_dripp is not None):
+                # Atom's learned intensity
+                ax = axes[4, i_atom]
+                # get DriPP results
+                columns = ['baseline', 'alpha', 'm', 'sigma', 'lower', 'upper']
+                res = df_dripp[columns][df_dripp['atom'] == kk].iloc[0]
+                baseline = res['baseline']
+                alpha = res['alpha'][0]
+                m, sigma = res['m'][0], res['sigma'][0]
+                lower, upper = res['lower'], res['upper']
+                # define kernel function
+                kernel = TruncNormKernel(lower, upper, m, sigma)
+                # plot learned intensity
+                xx = np.linspace(-0.5, upper, 500)
+                yy = baseline + alpha * kernel.eval(xx)
+                ax.plot(xx, yy, label='button')
+                ax.set_xlim(-0.5, upper)
+
+                if i_atom == 0:
+                    intensity_ax = ax
+                    ax.set_ylabel("Intensity", labelpad=7, fontsize=fontsize)
+                else:
+                    # rescale inteisty axe
+                    intensity_ax.get_shared_y_axes().join(intensity_ax, ax)
+                    ax.autoscale()
+
+                ax.legend(fontsize=fontsize, handlelength=1)
 
             fig.tight_layout()
             fig.subplots_adjust(top=0.88)

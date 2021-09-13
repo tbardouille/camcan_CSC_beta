@@ -12,12 +12,14 @@ from alphacsc.viz.epoch import make_epochs
 
 from utils_csc import run_csc
 from utils_plot import plot_csc
+from utils_dripp import get_dripp_results
 
 DATA_DIR = Path("/storage/store/data/")
 BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
 SSS_CAL_FILE = DATA_DIR / "camcan-mne/Cam-CAN_sss_cal.dat"
 CT_SPARSE_FILE = DATA_DIR / "camcan-mne/Cam-CAN_ct_sparse.fif"
 PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
+HOME_DIR = Path('.')
 
 mem = Memory('.')
 
@@ -61,8 +63,6 @@ exp_params = {
     "tol_z": 1e-3,  # in Tim's: 1e-2
 }
 
-HOME_DIR = Path('.')
-
 cdl_params = {
     'n_atoms': exp_params['n_atoms'],
     'n_times_atom': int(np.round(exp_params["atom_duration"] * sfreq)),
@@ -84,15 +84,28 @@ cdl_params = {
     'n_jobs': 5
 }
 
+dripp_params = {
+    'threshold': 0.5e-10,
+    'lower': 0, 'upper': 500e-3,
+    'sfreq': sfreq,
+    'initializer': 'smart_start',
+    'alpha_pos': True,
+    'n_iter': 80,
+    'verbose': False,
+    'disable_tqdm': False
+}
+
+all_params = [exp_params, cdl_params, dripp_params]
+
 # Create folder to save results for the considered subject
 subject_output_dir = HOME_DIR / "results" / subject_id
 subject_output_dir.mkdir(parents=True, exist_ok=True)
 # Create folder to save final figures for a particular set of parameters
-exp_output_dir = subject_output_dir / hash([exp_params, cdl_params])
+exp_output_dir = subject_output_dir / hash(all_params)
 exp_output_dir.mkdir(parents=True, exist_ok=True)
 # Save experiment parameters
 with open(exp_output_dir / 'exp_params', 'w') as fp:
-    json.dump([exp_params, cdl_params], fp, sort_keys=True, indent=4)
+    json.dump(all_params, fp, sort_keys=True, indent=4)
 
 # %% Read raw data from BIDS file
 bp = BIDSPath(
@@ -188,13 +201,25 @@ allZ = make_epochs(
     # n_times_atom=int(np.round(atom_duration * sfreq)),
     n_times_atom=cdl_params['n_times_atom'])
 
+# %%
+df_dripp = get_dripp_results(cdl_model,
+                             z_hat_,
+                             sfreq,
+                             events=events_no_first_samp,
+                             event_id=all_event_id['button'],
+                             dripp_params=dripp_params,
+                             save_dir=exp_output_dir)
+
+# %%
 
 plot_csc(cdl_model=cdl_model,
          raw_csc=raw_csc,
          allZ=allZ,
          plot_acti_histo=True,
          activation_tstart=activation_tstart,
+         df_dripp=df_dripp,
          save_dir=exp_output_dir,
          title=fig_title)
+
 
 # %%

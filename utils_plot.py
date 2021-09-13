@@ -127,16 +127,29 @@ def plot_csc(cdl_model, raw_csc, allZ,
                 columns = ['baseline', 'alpha', 'm', 'sigma', 'lower', 'upper']
                 res = df_dripp[columns][df_dripp['atom'] == kk].iloc[0]
                 baseline = res['baseline']
-                alpha = res['alpha'][0]
-                m, sigma = res['m'][0], res['sigma'][0]
                 lower, upper = res['lower'], res['upper']
-                # define kernel function
-                kernel = TruncNormKernel(lower, upper, m, sigma)
-                # plot learned intensity
-                xx = np.linspace(-0.5, upper, 500)
-                yy = baseline + alpha * kernel.eval(xx)
-                ax.plot(xx, yy, label='button')
-                ax.set_xlim(-0.5, upper)
+                if np.isnan(baseline):
+                    ax.text(0.5, 0.5, "no activation",
+                            horizontalalignment='center',
+                            verticalalignment='center',
+                            transform=ax.transAxes)
+                else:
+                    xx = np.linspace(-0.5, upper, 500)
+                    try:
+                        # XXX
+                        # for subject CC110033, atom 15, DriPP returns [nan]
+                        # for alpha and kernel shape, but 0 for baseline
+                        # define kernel function
+                        alpha = res['alpha'][0]
+                        m, sigma = res['m'][0], res['sigma'][0]
+                        kernel = TruncNormKernel(lower, upper, m, sigma)
+                        yy = baseline + alpha * kernel.eval(xx)
+                    except AssertionError:
+                        yy = baseline * np.ones(xx.shape)
+
+                    # plot learned intensity
+                    ax.plot(xx, yy, label='button')
+                    ax.set_xlim(-0.5, upper)
 
                 if i_atom == 0:
                     intensity_ax = ax

@@ -25,7 +25,11 @@ mem = Memory('.')
 
 participants = pd.read_csv(PARTICIPANTS_FILE, sep='\t', header=0)
 
-subject_id = "CC620264"
+# subject_id = "CC110037"  # 18.75
+# subject_id = "CC620264"  # 76.33
+# subject_id = "CC723395"  # 86.08
+subject_id = "CC320428"  # 45.58 Male
+
 
 if len(sys.argv) > 1:  # get subject_id from command line
     try:
@@ -85,8 +89,8 @@ cdl_params = {
 }
 
 dripp_params = {
-    'threshold': 0.5e-10,
-    'lower': 0, 'upper': 500e-3,
+    'threshold': 0,
+    'lower': 0, 'upper': 1,
     'sfreq': sfreq,
     'initializer': 'smart_start',
     'alpha_pos': True,

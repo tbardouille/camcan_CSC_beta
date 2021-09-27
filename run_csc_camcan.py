@@ -25,10 +25,11 @@ mem = Memory('.')
 
 participants = pd.read_csv(PARTICIPANTS_FILE, sep='\t', header=0)
 
-# subject_id = "CC110037"  # 18.75
-# subject_id = "CC620264"  # 76.33
+subject_id = "CC110037"  # 18.75
+# subject_id = "CC320428"  # 45.58 Male
+# subject_id = "CC620264"  # 76.33 Female
+
 # subject_id = "CC723395"  # 86.08
-subject_id = "CC320428"  # 45.58 Male
 
 
 if len(sys.argv) > 1:  # get subject_id from command line
@@ -55,16 +56,16 @@ tmax = 1.7
 baseline = (-1.25, -1.0)
 
 activation_tstart = -tmin
-shift_acti = False  # put activation to the peak amplitude time in the atom
+shift_acti = True  # put activation to the peak amplitude time in the atom
 
-exp_params = {
-    "subject_id": subject_id,
-    "sfreq": sfreq,  # in Tim's: 300
-    "atom_duration": 0.7,  # in Tim's: 0.5,
-    "n_atoms": 30,  # in Tim's: 25,
-    "reg": 0.2,  # in Tim's: 0.2,
-    "eps": 1e-5,  # in Tim's: 1e-4,
-    "tol_z": 1e-3,  # in Tim's: 1e-2
+exp_params = {                 # in Tim's code:
+    "subject_id": subject_id,  # "CC620264"  - 76.33 y.o. female
+    "sfreq": sfreq,            # 300
+    "atom_duration": 0.5,      # 0.5,
+    "n_atoms": 20,             # 25,
+    "reg": 0.2,                # 0.2,
+    "eps": 1e-5,               # 1e-4,
+    "tol_z": 1e-3,             # 1e-2
 }
 
 cdl_params = {
@@ -94,7 +95,7 @@ dripp_params = {
     'sfreq': sfreq,
     'initializer': 'smart_start',
     'alpha_pos': True,
-    'n_iter': 80,
+    'n_iter': 150,
     'verbose': False,
     'disable_tqdm': False
 }
@@ -219,6 +220,7 @@ df_dripp = get_dripp_results(cdl_model,
 plot_csc(cdl_model=cdl_model,
          raw_csc=raw_csc,
          allZ=allZ,
+         shift_acti=shift_acti,
          plot_acti_histo=True,
          activation_tstart=activation_tstart,
          df_dripp=df_dripp,

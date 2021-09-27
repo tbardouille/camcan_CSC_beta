@@ -134,7 +134,8 @@ def plot_csc(cdl_model, raw_csc, allZ,
                             verticalalignment='center',
                             transform=ax.transAxes)
                 else:
-                    xx = np.linspace(-0.5, upper, 500)
+                    # xx = np.linspace(-0.5, upper, 500)
+                    xx = t1
                     try:
                         # XXX
                         # for subject CC110033, atom 15, DriPP returns [nan]
@@ -149,15 +150,15 @@ def plot_csc(cdl_model, raw_csc, allZ,
 
                     # plot learned intensity
                     ax.plot(xx, yy, label='button')
-                    ax.set_xlim(-0.5, upper)
+                    # ax.set_xlim(-0.5, upper)
 
                 if i_atom == 0:
-                    intensity_ax = ax
+                    # intensity_ax = ax
                     ax.set_ylabel("Intensity", labelpad=7, fontsize=fontsize)
-                else:
-                    # rescale inteisty axe
-                    intensity_ax.get_shared_y_axes().join(intensity_ax, ax)
-                    ax.autoscale()
+                # else:
+                #     # rescale inteisty axe
+                #     intensity_ax.get_shared_y_axes().join(intensity_ax, ax)
+                #     ax.autoscale()
 
                 ax.legend(fontsize=fontsize, handlelength=1)
 

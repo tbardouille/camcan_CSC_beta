@@ -1,40 +1,36 @@
 #!/usr/bin/env python
 
-# %%
-# Import libraries
-import os
-from pathlib import Path
 import sys
 import numpy as np
-import pandas as pd
 import mne
-import multiprocessing as mp
 import logging
+
 from mne.time_frequency import tfr_morlet
+
+from utils import getPaths
 
 # Script to calculate the TFR for each participant's MEG data
 
 
 def MEG_preproc(subjectID):
+    """
 
-    # Script to create processed data for Motor blocks
-    # homeDir = Path(os.path.expanduser("~"))
-    homeDir = Path.home()
-    dataDir = homeDir / 'camcan'
-    outDir = dataDir / 'proc_data' / 'TaskSensorAnalysis_transdef'
-    dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
+    Parameters
+    ----------
+    subjectID : string
 
+    """
     # Analysis parameters
     TFRfmin = 5
     TFRfmax = 50
     TFRfstep = 5
     channelName = 'MEG0712'
 
+    dsPrefix = 'transdef_transrest_mf2pt2_task_raw'
+
     ####################################################################
-    # Files that exist
-    subjectDir = outDir / str(subjectID)
-    if not subjectDir.exists():
-        subjectDir.mkdir(parents=True)
+    dictPaths = getPaths(subjectID)
+    subjectDir = dictPaths['procSubjectOutDir']
     fifName = dsPrefix + '_buttonPress_duration=3.4s_cleaned-epo.fif'
     epochFif = subjectDir / fifName
     if not epochFif.exists():
@@ -66,5 +62,3 @@ power, epochs_clean = MEG_preproc('CC620264')
 
 # Plot the result, and make sure they have a nice beta suppression
 power.plot()
-
-# %%

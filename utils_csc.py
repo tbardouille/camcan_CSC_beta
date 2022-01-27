@@ -27,20 +27,24 @@ def run_csc(X, **cdl_params):
     print('Computing CSC')
 
     cdl_params = dict(cdl_params)
-    n_splits = cdl_params.pop('n_splits', 10)
+    n_splits = cdl_params.pop('n_splits', 1)
     use_batch_cdl = cdl_params.pop('use_batch_cdl', False)
     if use_batch_cdl:
         cdl_model = BatchCDL(**cdl_params)
     else:
         cdl_model = GreedyCDL(**cdl_params)
 
-    X_splits = split_signal(X, n_splits=n_splits, apply_window=True)
+    if n_splits > 1:
+        X_splits = split_signal(X, n_splits=n_splits, apply_window=True)
+        X = X[None, :]
+    else:
+        X_splits = X.copy()
 
     # Fit the model and learn rank1 atoms
     print('Running CSC')
     cdl_model.fit(X_splits)
 
-    z_hat_ = cdl_model.transform(X[None, :])
+    z_hat_ = cdl_model.transform(X)
     return cdl_model, z_hat_
 
 

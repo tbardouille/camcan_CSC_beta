@@ -19,10 +19,14 @@ import mne
 
 from utils_csc import run_csc
 
+# Paths for Cam-CAN dataset
 DATA_DIR = Path("/storage/store/data/")
 BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
 TRANS_DIR = DATA_DIR / "camcan-mne/trans"
+BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
+PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
 
+# path to all participant CSC results
 RESULTS_DIR = Path('./results_csc')
 SUBJECT_DIRS = [f for f in RESULTS_DIR.iterdir() if not f.is_file()]
 
@@ -182,7 +186,8 @@ def compute_mean_atom(df_topomaps, use_batch_cdl):
             # append dataframe
             new_rows.append({'class_label': class_label,
                              'method': method,
-                             'u_hat': cdl_model.u_hat_[0]})
+                             'u_hat': cdl_model.u_hat_[0],
+                             'v_hat': cdl_model.v_hat_[0]})
             # plot "mean" atom
             mne.viz.plot_topomap(data=cdl_model.u_hat_[
                                  0], pos=info, show=False)

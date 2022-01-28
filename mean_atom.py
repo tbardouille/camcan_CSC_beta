@@ -211,6 +211,49 @@ def compute_mean_atom(df_topomaps, use_batch_cdl):
     return df_mean
 
 
+def temp(df, col_label, cdl_params):
+    """
+    df : pandas.DataFrame
+        the clustering dataframe where each row is an atom, and has at least
+        the folowing columns :
+            subject_id : the participant id associated with the atom
+            u_hat : the topomap vector of the atom
+            v_hat : the temporal pattern of the atom
+            col_label : the cluster result
+
+    col_label : str
+        the name of the column that contains the cultering result
+
+    cdl_params : dict
+        the CDL parameters to use to compute the mean atom
+
+    """
+
+    def procedure(class_label):
+        # Reconstruct signal for a given class
+        X, info, n_times_atom = reconstruct_class_signal(
+            df_topomaps, method, label=class_label)
+        cdl_params['n_times_atom'] = n_times_atom
+        cdl_model, _ = run_csc(X, **cdl_params)
+        # append dataframe
+        new_row = {'class_label': class_label,
+                   'method': method,
+                   'u_hat': cdl_model.u_hat_[0],
+                   'v_hat': cdl_model.v_hat_[0]}
+        # plot "mean" atom
+        mne.viz.plot_topomap(data=cdl_model.u_hat_[
+            0], pos=info, show=False)
+        plt.title("Mean atom for age group %i, %s clustering, class %i" %
+                  (AGE_GROUP, method, class_label))
+        fig_name = 'age_group_' + str(AGE_GROUP) + "_" + \
+            method + "_class_" + str(class_label)
+        plt.savefig('results_mean_atom/' + fig_name + '.pdf')
+        plt.savefig('results_mean_atom/' + fig_name + '.png')
+        plt.close()
+
+        return new_row
+
+
 def plot_global_class(df, df_mean=None, method='cah', class_label=0):
     """
 

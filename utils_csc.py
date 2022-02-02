@@ -1,6 +1,8 @@
 """
 Utils scripts for utils functions 
 """
+from sklearn import cluster
+from sklearn.cluster import AgglomerativeClustering
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -108,7 +110,7 @@ def get_atom_df(results_dir, participants_file):
 
     subject_dirs = [f for f in results_dir.iterdir() if not f.is_file()]
 
-    df = pd.DataFrame
+    df = pd.DataFrame()
     for subject_dir in subject_dirs:
         subject_id = subject_dir.name
         # get participant info
@@ -118,10 +120,36 @@ def get_atom_df(results_dir, participants_file):
                     'sex': sex}
         # get participant CSC results
         file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+        if not file_name.exists():
+            print(f"No such file or directory: {file_name}")
+            break
+
         cdl_model = pickle.load(open(file_name, "rb"))[0]
         for i, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
-            new_row = {**base_row, 'atom_id': i, 'u_hat': u, 'v_hat': v}
+            new_row = {**base_row, 'atom_id': int(i), 'u_hat': u, 'v_hat': v}
             df = df.append(new_row, ignore_index=True)
+
+    return df
+
+
+def culstering_cah_kmeans(df, data_columns='all', n_clusters=6):
+    """Compute a CAH and k-means clustering
+
+    """
+    if data_columns == 'all':
+        data = np.array(df)
+    else:
+        data = np.array(df[data_columns])
+    # CAH clustering
+    clustering = AgglomerativeClustering(n_clusters=n_clusters,
+                                         affinity='euclidean',
+                                         linkage='ward')
+    clustering.fit(data)
+    df['labels_cah'] = clustering.labels_
+    # k-means clustering
+    kmeans = cluster.KMeans(n_clusters=n_clusters)
+    kmeans.fit(data)
+    df['labels_kmeans'] = kmeans.labels_
 
     return df
 
@@ -227,7 +255,8 @@ def get_df_mean(df, col_label, cdl_params, results_dir, n_jobs=6):
         new_row = {col_label: label,
                    'u_hat': cdl_model.u_hat_[0],
                    'v_hat': cdl_model.v_hat_[0],
-                   'z_hat': z_hat}
+                   'z_hat': z_hat,
+                   'n_times_atom': n_times_atom}
 
         return new_row
 
@@ -237,5 +266,7 @@ def get_df_mean(df, col_label, cdl_params, results_dir, n_jobs=6):
     df_mean = pd.DataFrame()
     for new_row in new_rows:
         df_mean = df_mean.append(new_row, ignore_index=True)
+
+    df_mean.rename(columns={col_label: 'label'}, inplace=True)
 
     return df_mean

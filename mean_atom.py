@@ -17,20 +17,73 @@ from joblib import Memory, Parallel, delayed
 
 import mne
 
-from utils_csc import run_csc
+from utils_csc import get_atom_df, culstering_cah_kmeans, get_df_mean, plot_mean_atom
 
 # Paths for Cam-CAN dataset
-DATA_DIR = Path("/storage/store/data/")
-BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
-TRANS_DIR = DATA_DIR / "camcan-mne/trans"
-BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
-PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
+# DATA_DIR = Path("/storage/store/data/")
+# BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
+# TRANS_DIR = DATA_DIR / "camcan-mne/trans"
+# BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
+# PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
 
-# path to all participant CSC results
+# path to all participant CSC results (local)
 RESULTS_DIR = Path('./results_csc')
 SUBJECT_DIRS = [f for f in RESULTS_DIR.iterdir() if not f.is_file()]
+PARTICIPANTS_FILE = Path('./participants.tsv')
 
-AGE_GROUP = 1
+# AGE_GROUP = 1
+
+
+atom_df = get_atom_df(RESULTS_DIR, PARTICIPANTS_FILE)
+
+# data_columns = ['u_hat']
+n_captors = len(atom_df['u_hat'].iloc[0])
+data_columns = [f'u_hat_{i}' for i in range(n_captors)]
+split_df = pd.DataFrame(atom_df['u_hat'].tolist(),
+                        columns=data_columns)
+atom_df = pd.concat([atom_df, split_df], axis=1)
+
+# get info
+subject_id = atom_df['subject_id'].values[0]
+file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+_, info, _, _ = pickle.load(open(file_name, "rb"))
+meg_indices = mne.pick_types(info, meg='grad')
+info = mne.pick_info(info, meg_indices)
+
+# %% Select number of classes to keep
+plt.title("CAH on CAM-Can topomaps vectors")
+dendrogram(linkage(np.array(atom_df[data_columns]), method='ward'),
+           orientation='right', truncate_mode='level', p=5)
+plt.show()
+
+# %% Apply clustering
+n_clusters = 6
+culstering_df = culstering_cah_kmeans(atom_df, data_columns)
+
+# %% Recompute signal and compute mean atom
+use_batch_cdl = False
+cdl_params = {
+    'rank1': True, 'uv_constraint': 'separate',
+    'window': True,  # in Tim's: False
+    'unbiased_z_hat': True,  # in Tim's: False
+    'D_init': 'chunk',
+    'lmbd_max': 'scaled', 'reg': 0.2,
+    'n_iter': 100, 'eps': 1e-5,
+    'solver_z': 'lgcd',
+    'solver_z_kwargs': {'tol': 1e-3, 'max_iter': 1000},
+    'solver_d': 'alternate_adaptive',
+    'solver_d_kwargs': {'max_iter': 300},
+    'sort_atoms': True,
+    'verbose': 1,
+    'random_state': 0,
+    'use_batch_cdl': use_batch_cdl,
+    'n_splits': 1,
+    'n_jobs': 5
+}
+df_mean = get_df_mean(culstering_df, col_label='labels_cah',
+                      cdl_params=cdl_params, results_dir=RESULTS_DIR, n_jobs=6)
+plot_mean_atom(df_mean, info)
+# %%
 
 
 def get_df_topomaps(age_group):
@@ -60,26 +113,6 @@ def get_df_topomaps(age_group):
     return df_topomaps, data_columns
 
 
-def df_culstering(df, data_columns, n_clusters):
-    """
-
-    """
-    data = np.array(df[data_columns])
-    # Recompute CAH clustering
-    clustering = AgglomerativeClustering(n_clusters=n_clusters,
-                                         affinity='euclidean',
-                                         linkage='ward')
-    clustering.fit(data)
-    df['labels_cah'] = clustering.labels_
-
-    # With k-means
-    kmeans = cluster.KMeans(n_clusters=n_clusters)
-    kmeans.fit(data)
-    df['labels_kmeans'] = kmeans.labels_
-
-    return df
-
-
 def plot_topomaps(subject_id, atom_idx):
     # get CDL results for the subject_id
     file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
@@ -106,152 +139,6 @@ def plot_topomaps(subject_id, atom_idx):
 
     fig.tight_layout()
     plt.show()
-
-
-def reconstruct_class_signal(df, method, label):
-    """
-
-    """
-
-    sub_df = df[df['labels_' + method] == label]
-
-    Z_temp = []
-    D_temp = []
-    min_n_times_valid = np.inf
-    for subject_id in list(set(sub_df['subject_id'].values)):
-        file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
-        cdl_model, info, _, _ = pickle.load(open(file_name, "rb"))
-        atom_idx = sub_df[sub_df['subject_id'] ==
-                          subject_id]['atom_id'].values.astype(int)
-        Z_temp.append(cdl_model.z_hat_[:, atom_idx, :])
-        min_n_times_valid = min(min_n_times_valid, Z_temp[-1].shape[2])
-        D_temp.append(cdl_model.D_hat_[atom_idx, :, :])
-
-    # combine z and d vectors
-    Z = Z_temp[0][:, :, :min_n_times_valid]
-    D = D_temp[0]
-    for this_z, this_d in zip(Z_temp[1:], D_temp[1:]):
-        this_z = this_z[:, :, :min_n_times_valid]
-        Z = np.concatenate((Z, this_z), axis=1)
-        D = np.concatenate((D, this_d), axis=0)
-
-    print(Z.shape)
-    print(D.shape)
-
-    X = construct_X_multi(Z, D)
-
-    # select only grad channels
-    meg_indices = mne.pick_types(info, meg='grad')
-    info = mne.pick_info(info, meg_indices)
-
-    n_times_atom = D.shape[-1]
-
-    return X, info, n_times_atom
-
-
-def compute_mean_atom(df_topomaps, use_batch_cdl):
-    """
-
-    """
-    # run CSC with one atom
-    cdl_params = {
-        'n_atoms': 1,
-        'rank1': True, 'uv_constraint': 'separate',
-        'window': True,  # in Tim's: False
-        'unbiased_z_hat': True,  # in Tim's: False
-        'D_init': 'chunk',
-        'lmbd_max': 'scaled', 'reg': 0.2,
-        'n_iter': 100, 'eps': 1e-5,
-        'solver_z': 'lgcd',
-        'solver_z_kwargs': {'tol': 1e-3, 'max_iter': 1000},
-        'solver_d': 'alternate_adaptive',
-        'solver_d_kwargs': {'max_iter': 300},
-        'sort_atoms': True,
-        'verbose': 1,
-        'random_state': 0,
-        'use_batch_cdl': use_batch_cdl,
-        'n_splits': 1,
-        'n_jobs': 5
-    }
-
-    def procedure(class_label):
-        new_rows = []
-
-        for method in ['cah', 'kmeans']:
-            # Reconstruct signal for a given class
-            X, info, n_times_atom = reconstruct_class_signal(
-                df_topomaps, method, label=class_label)
-            cdl_params['n_times_atom'] = n_times_atom
-            cdl_model, _ = run_csc(X, **cdl_params)
-            # append dataframe
-            new_rows.append({'class_label': class_label,
-                             'method': method,
-                             'u_hat': cdl_model.u_hat_[0],
-                             'v_hat': cdl_model.v_hat_[0]})
-            # plot "mean" atom
-            mne.viz.plot_topomap(data=cdl_model.u_hat_[
-                                 0], pos=info, show=False)
-            plt.title("Mean atom for age group %i, %s clustering, class %i" %
-                      (AGE_GROUP, method, class_label))
-            fig_name = 'age_group_' + str(AGE_GROUP) + "_" + \
-                method + "_class_" + str(class_label)
-            plt.savefig('results_mean_atom/' + fig_name + '.pdf')
-            plt.savefig('results_mean_atom/' + fig_name + '.png')
-            plt.close()
-
-        return new_rows
-
-    new_rows = Parallel(n_jobs=6, verbose=1)(
-        delayed(procedure)(class_label) for class_label in range(n_clusters))
-
-    df_mean = pd.DataFrame()
-    for new_row in new_rows:
-        df_mean = df_mean.append(new_row, ignore_index=True)
-
-    return df_mean
-
-
-def temp(df, col_label, cdl_params):
-    """
-    df : pandas.DataFrame
-        the clustering dataframe where each row is an atom, and has at least
-        the folowing columns :
-            subject_id : the participant id associated with the atom
-            u_hat : the topomap vector of the atom
-            v_hat : the temporal pattern of the atom
-            col_label : the cluster result
-
-    col_label : str
-        the name of the column that contains the cultering result
-
-    cdl_params : dict
-        the CDL parameters to use to compute the mean atom
-
-    """
-
-    def procedure(class_label):
-        # Reconstruct signal for a given class
-        X, info, n_times_atom = reconstruct_class_signal(
-            df_topomaps, method, label=class_label)
-        cdl_params['n_times_atom'] = n_times_atom
-        cdl_model, _ = run_csc(X, **cdl_params)
-        # append dataframe
-        new_row = {'class_label': class_label,
-                   'method': method,
-                   'u_hat': cdl_model.u_hat_[0],
-                   'v_hat': cdl_model.v_hat_[0]}
-        # plot "mean" atom
-        mne.viz.plot_topomap(data=cdl_model.u_hat_[
-            0], pos=info, show=False)
-        plt.title("Mean atom for age group %i, %s clustering, class %i" %
-                  (AGE_GROUP, method, class_label))
-        fig_name = 'age_group_' + str(AGE_GROUP) + "_" + \
-            method + "_class_" + str(class_label)
-        plt.savefig('results_mean_atom/' + fig_name + '.pdf')
-        plt.savefig('results_mean_atom/' + fig_name + '.png')
-        plt.close()
-
-        return new_row
 
 
 def plot_global_class(df, df_mean=None, method='cah', class_label=0):

@@ -27,6 +27,7 @@ def plot_csc(cdl_model, raw_csc, allZ,
     allZ :
 
     plot_acti_histo : bool
+        if True, plot the histogram of activations
 
     shift_acti : bool
         if True, roll to put activation to the peak amplitude time in the atom
@@ -173,5 +174,62 @@ def plot_csc(cdl_model, raw_csc, allZ,
     if show:
         plt.show()
     return figs
+
+# %%
+
+
+def plot_mean_atom(df, info, sfreq=150., plot_psd=False, plot_acti_histo=False):
+    """
+
+    """
+    n_atoms = len(set(df['label'].values))
+
+    n_columns = n_atoms
+    n_plots = 2 + plot_psd + plot_acti_histo
+    figsize = (4 * n_columns, 3 * n_plots)
+    fig, axes = plt.subplots(n_plots, n_columns, figsize=figsize)
+    axes = np.atleast_2d(axes)
+
+    for ii, row in df.iterrows():
+        label, u_hat, v_hat, z_hat = row.label, row.u_hat, row.v_hat, row.z_hat
+        # Select the axes to display the current atom
+        i_row, i_col = ii // n_columns, ii % n_columns
+        it_axes = iter(axes[i_row * n_plots:(i_row + 1) * n_plots, i_col])
+
+        ax = next(it_axes)
+        ax.set_title(f'Class label {label}', pad=0)
+        # Plot the spatial map of the atom using mne topomap
+        mne.viz.plot_topomap(data=u_hat, pos=info, axes=ax, show=False)
+        if i_col == 0:
+            ax.set_ylabel('Spatial', labelpad=30)
+        # Plot the temporal pattern of the atom
+        ax = next(it_axes)
+        ax.plot(np.arange(v_hat.shape[0]) / sfreq, v_hat)
+        atom_duration = v_hat.shape[-1] / 150.
+        ax.set_xlim(0, atom_duration)
+        if i_col == 0:
+            temporal_ax = ax
+            ax.set_ylabel('Temporal')
+
+        if i_col > 0:
+            ax.get_yaxis().set_visible(False)
+            temporal_ax.get_shared_y_axes().join(temporal_ax, ax)
+            ax.autoscale()
+
+        if plot_psd:
+            ax = next(it_axes)
+            psd = np.abs(np.fft.rfft(v_hat, n=256)) ** 2
+            frequencies = np.linspace(0, sfreq / 2.0, len(psd))
+            ax.semilogy(frequencies, psd, label="PSD", color="k")
+            ax.set_xlim(0, 40)  # crop x axis
+            ax.set_xlabel("Frequencies (Hz)")
+            ax.grid(True)
+            if i_col == 0:
+                ax.set_ylabel("Power Spectral Density", labelpad=8)
+
+    fig.tight_layout()
+    plt.show()
+
+    return fig
 
 # %%

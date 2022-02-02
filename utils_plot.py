@@ -178,14 +178,14 @@ def plot_csc(cdl_model, raw_csc, allZ,
 # %%
 
 
-def plot_mean_atom(df, info, sfreq=150., plot_psd=False, plot_acti_histo=False):
+def plot_mean_atom(df, info, sfreq=150., plot_psd=False, plot_acti_histo=False, plot_dipole=False):
     """
 
     """
     n_atoms = len(set(df['label'].values))
 
     n_columns = n_atoms
-    n_plots = 2 + plot_psd + plot_acti_histo
+    n_plots = 2 + plot_psd + plot_acti_histo + plot_dipole
     figsize = (4 * n_columns, 3 * n_plots)
     fig, axes = plt.subplots(n_plots, n_columns, figsize=figsize)
     axes = np.atleast_2d(axes)
@@ -226,6 +226,14 @@ def plot_mean_atom(df, info, sfreq=150., plot_psd=False, plot_acti_histo=False):
             ax.grid(True)
             if i_col == 0:
                 ax.set_ylabel("Power Spectral Density", labelpad=8)
+
+        if plot_acti_histo:
+            # XXX
+            pass
+
+        if plot_dipole:
+            # XXX
+            pass
 
     fig.tight_layout()
     plt.show()

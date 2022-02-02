@@ -1,6 +1,8 @@
 """
 Utils scripts for utils functions 
 """
+from codecs import ignore_errors
+import scipy.signal as ss
 from sklearn import cluster
 from sklearn.cluster import AgglomerativeClustering
 import numpy as np
@@ -14,10 +16,43 @@ from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 from alphacsc.utils.convolution import construct_X_multi
 
+from config import get_paths, CDL_PARAMS
+
 # Paths for Cam-CAN dataset
 DATA_DIR = Path("/storage/store/data/")
 BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
 PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
+
+fifFile = '/transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif'
+EPOCH_DIR = '/home/timb/camcan/proc_data/TaskSensorAnalysis_transdef/'
+
+DATA_DIR = Path("/storage/store/data/")
+BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
+TRANS_DIR = DATA_DIR / "camcan-mne/trans"
+
+RESULT_DIR = ''  # XXX
+
+
+def get_paths(subject_id, dal=True):
+    if dal:
+        # Files for dipole fitting
+        subjectsDir = '/home/timb/camcan/subjects'
+        transFif = subjectsDir + '/coreg/sub-' + subject_id + '-trans.fif'
+        bemFif = subjectsDir + '/sub-' + subject_id + '/bem/sub-' + \
+            subject_id + '-5120-bem-sol.fif'
+        fifFile = '/transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif'
+        epochFif = '/home/timb/camcan/proc_data/TaskSensorAnalysis_transdef/' + \
+            subject_id + fifFile
+    else:
+        # XXX find the good paths for Parital drago server
+        bemFif = BEM_DIR / subject_id / \
+            'bem' / (subject_id + '-meg-bem.fif')
+        subjectsDir + '/sub-' + subject_id + \
+            '/bem/sub-' + subject_id + '-5120-bem-sol.fif'
+        transFif = TRANS_DIR / ('sub-' + subject_id + '-trans.fif')
+        epochFif = EPOCH_DIR + subject_id + fifFile
+
+    return epochFif, transFif, bemFif
 
 
 def run_csc(X, **cdl_params):
@@ -115,21 +150,225 @@ def get_atom_df(results_dir, participants_file):
         subject_id = subject_dir.name
         # get participant info
         age, sex = get_subject_info(participants_file, subject_id)
-        base_row = {'subject_id': subject_id,
-                    'age': age,
-                    'sex': sex}
+        base_row = {'subject_id': subject_id, 'age': age, 'sex': sex}
         # get participant CSC results
         file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
         if not file_name.exists():
             print(f"No such file or directory: {file_name}")
             break
 
-        cdl_model = pickle.load(open(file_name, "rb"))[0]
-        for i, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
-            new_row = {**base_row, 'atom_id': int(i), 'u_hat': u, 'v_hat': v}
+        # load CSC results
+        cdl_model, _, allZ = pickle.load(open(file_name, "rb"))
+
+        # make epoch and compute dipole fit
+        epochFif, transFif, bemFif = get_paths(subject_id, dal=True)
+        # Read in epochs for task data
+        epochs = mne.read_epochs(epochFif)
+        epochs.pick_types(meg='grad')
+        info = epochs.info
+        cov = mne.compute_covariance(epochs)
+
+        # Make an evoked object with all atom topographies for dipole fitting
+        evoked = mne.EvokedArray(cdl_model.u_hat_.T, info)
+        # compute dipole fit
+        dip = mne.fit_dipole(evoked, cov, bemFif,
+                             transFif,  verbose=False)[0]
+
+        for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
+            gof = dip.gof[kk]
+            pos = dip.pos[kk]  # 3-element list (index to x, y, z)
+            ori = dip.ori[kk]  # 3-element list (index to x, y, z)
+            # calculate the percent change in activation between different
+            # phases of movement
+            pre = allZ[:, kk, 68:218]  # -1.25 to -0.25 sec (150 samples)
+            move = allZ[:, kk, 218:293]  # -0.25 to 0.25 sec (75 samples)
+            # 0.25 to 1.25 sec (150 samples)
+            post = allZ[:, kk, 293:443]
+
+            pre_sum = np.sum(pre)
+            move_sum = np.sum(move)
+            post_sum = np.sum(post)
+            # multiply by 2 for movement phase because there are half as many samples
+            z1 = (pre_sum-move_sum*2)/pre_sum
+            z2 = (post_sum-move_sum*2)/post_sum
+            z3 = (post_sum-pre_sum)/post_sum
+            # update dataframe
+            new_row = {**base_row, 'atom_id': int(kk), 'u_hat': u, 'v_hat': v,
+                       'Dipole GOF': gof, 'Dipole Pos x': pos[0],
+                       'Dipole Pos y': pos[1], 'Dipole Pos z': pos[2],
+                       'Dipole Ori x': ori[0], 'Dipole Ori y': ori[1],
+                       'Dipole Ori z': ori[2],
+                       'Pre-Move Change': z1,
+                       'Post-Move Change': z2,
+                       'Post-Pre Change': z3}
             df = df.append(new_row, ignore_index=True)
 
     return df
+
+
+OUTPUT_DIR = '/media/NAS/lpower/CSC/results/u_'
+
+
+def correlation_clustering_atoms(atom_df, threshold=0.4, output_dir=OUTPUT_DIR):
+    """
+
+    Parameters
+    ----------
+    threshold : float
+        threshold to create new groups
+
+    Returns
+    -------
+    groupSummary, atomGroups (and save them XXX)
+
+    """
+
+    # XXX exclude 'bad' subjects (single slustering operation)
+
+    # XXX make it read a pre-saved file
+    exclude_subs = ['CC420061', 'CC121397', 'CC420396', 'CC420348', 'CC320850',
+                    'CC410325', 'CC121428', 'CC110182', 'CC420167', 'CC420261',
+                    'CC322186', 'CC220610', 'CC221209', 'CC220506', 'CC110037',
+                    'CC510043', 'CC621642', 'CC521040', 'CC610052', 'CC520517',
+                    'CC610469', 'CC720497', 'CC610292', 'CC620129', 'CC620490']
+
+    atom_df = atom_df[~atom_df['subject_id'].isin(exclude_subs)]
+    # Calculate the correlation coefficient between all atoms
+    u_vector_list = np.asarray(atom_df['u_hat'].values)
+    v_vector_list = np.asarray(atom_df['v_hat'].values)
+
+    v_coefs = []
+    for v in v_vector_list:
+        for v2 in v_vector_list:
+            coef = np.max(ss.correlate(v, v2))
+            v_coefs.append(coef)
+    v_coefs = np.asarray(v_coefs)
+    v_coefs = np.reshape(v_coefs, (10760, 10760))
+
+    u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
+
+    threshold_summary = pd.DataFrame(
+        columns=['Threshold', 'Number of Groups', 'Number of Top Groups'])
+
+    # Set parameters
+    u_thresh = threshold
+    v_thresh = threshold
+
+    atomNum = 0
+    groupNum = 0
+    unique = True
+
+    # Make atom groups array to keep track of the group that each atom belongs to
+    atomGroups = pd.DataFrame(
+        columns=['subject_id', 'atom_id', 'Index', 'Group number'])
+
+    for ii, row in atom_df.iterrows():
+        print(row)
+        subject_id, atom_id = row.subject_id, row.atom_id
+
+        max_corr = 0
+        max_group = 0
+
+        # Loops through the existing groups and calculates the atom's average correlation to that group
+        for group in range(0, groupNum + 1):
+            gr_atoms = atomGroups[atomGroups['Group number'] == group]
+            inds = gr_atoms['Index'].tolist()
+            u_groups = []
+            v_groups = []
+
+            # Find the u vector and correlation coefficient comparing the current atom to each atom in the group
+            for ind2 in inds:
+                u_coef = u_coefs[ii][ind2]
+                u_groups.append(u_coef)
+
+                v_coef = v_coefs[ii][ind2]
+                v_groups.append(v_coef)
+
+            # average across u and psd correlation coefficients in that group
+            u_groups = abs(np.asarray(u_groups))
+            avg_u = np.mean(u_groups)
+
+            v_groups = abs(np.asarray(v_groups))
+            avg_v = np.mean(v_groups)
+
+            # check if this group passes the thresholds
+            if (avg_u > u_thresh) & (avg_v > v_thresh):
+                unique = False
+                # If it does, also check if this is the highest cumulative correlation so far
+                if (avg_u + avg_v) > max_corr:
+                    max_corr = (avg_u + avg_v)
+                    max_group = group
+
+        # If the atom was similar to at least one group, sorts it into the group that it had the highest cumulative correlation to
+        if (unique == False):
+            groupDict = {'subject_id': subject_id, 'atom_id': atom_id,
+                         'Index': ii, 'Group number': max_group}
+
+        # If a similar group is not found, a new group is create and the current atom is added to that group
+        elif (unique == True):
+            groupNum += 1
+            print(groupNum)
+            groupDict = {'subject_id': subject_id, 'atom_id': atom_id,
+                         'Index': ii, 'Group number': groupNum}
+
+        # Add to group dataframe and reset unique boolean
+        atomGroups = atomGroups.append(groupDict, ignore_index=True)
+        unique = True
+
+        # Summary statistics for the current dataframe:
+
+    # Number of distinct groups
+    groups = atomGroups['Group number'].tolist()
+    groups = np.asarray(groups)
+    numGroups = len(np.unique(groups))
+
+    # Number of atoms and subjects per group
+    numAtoms_list = []
+    numSubs_list = []
+
+    for un in np.unique(groups):
+        numAtoms = len(np.where(groups == un)[0])
+        numAtoms_list.append(numAtoms)
+
+        groupRows = atomGroups[atomGroups['Group number'] == un]
+        sub_list = np.asarray(groupRows['Subject ID'].tolist())
+        numSubs = len(np.unique(sub_list))
+        numSubs_list.append(numSubs)
+
+    numAtoms_list = np.asarray(numAtoms_list)
+    meanAtoms = np.mean(numAtoms_list)
+    stdAtoms = np.std(numAtoms_list)
+
+    print("Number of groups:")
+    print(numGroups)
+
+    print("Average number of atoms per group:")
+    print(str(meanAtoms) + " +/- " + str(stdAtoms))
+
+    groupSummary = pd.DataFrame(
+        columns=['Group Number', 'Number of Atoms', 'Number of Subjects'])
+    groupSummary['Group Number'] = np.unique(groups)
+    groupSummary['Number of Atoms'] = numAtoms_list
+    groupSummary['Number of Subjects'] = numSubs_list
+
+    numSubs_list = np.asarray(numSubs_list)
+    topGroups = len(np.where(numSubs_list >= 12)[0])
+    threshold_dict = {'Threshold': threshold,
+                      'Number of Groups': numGroups, 'Number of Top Groups': topGroups}
+    threshold_summary = threshold_summary.append(
+        threshold_dict, ignore_index=True)
+
+    # Save group summary dataframe
+    csv_dir = output_dir + \
+        str(u_thresh) + '_v_' + str(v_thresh) + '_groupSummary.csv'
+    groupSummary.to_csv(csv_dir)
+
+    # Save atomGroups to dataframe
+    csv_dir = output_dir + \
+        str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
+    atomGroups.to_csv(csv_dir)
+
+    return groupSummary, atomGroups
 
 
 def culstering_cah_kmeans(df, data_columns='all', n_clusters=6):
@@ -205,7 +444,8 @@ def reconstruct_class_signal(df, results_dir):
     return X, n_times_atom
 
 
-def get_df_mean(df, col_label, cdl_params, results_dir, n_jobs=6):
+def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
+                results_dir=RESULT_DIR, n_jobs=6):
     """
 
     Parameters
@@ -268,5 +508,6 @@ def get_df_mean(df, col_label, cdl_params, results_dir, n_jobs=6):
         df_mean = df_mean.append(new_row, ignore_index=True)
 
     df_mean.rename(columns={col_label: 'label'}, inplace=True)
+    df_mean.to_csv(RESULT_DIR / 'df_mean_atom.csv')
 
     return df_mean

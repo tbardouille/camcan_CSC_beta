@@ -16,7 +16,7 @@ from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 from alphacsc.utils.convolution import construct_X_multi
 
-from config import get_paths, CDL_PARAMS
+from config import CDL_PARAMS
 
 # Paths for Cam-CAN dataset
 DATA_DIR = Path("/storage/store/data/")
@@ -144,6 +144,7 @@ def get_atom_df(results_dir, participants_file):
     """
 
     subject_dirs = [f for f in results_dir.iterdir() if not f.is_file()]
+    subject_dirs = subject_dirs[0]
 
     df = pd.DataFrame()
     for subject_dir in subject_dirs:
@@ -483,6 +484,7 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
     """
 
     # ensure that only one recurring pattern will be extracted
+    cdl_params['n_splits'] = 1
     cdl_params['n_atoms'] = 1
 
     def procedure(label):
@@ -506,8 +508,11 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
     df_mean = pd.DataFrame()
     for new_row in new_rows:
         df_mean = df_mean.append(new_row, ignore_index=True)
+    
+    print(df_mean) 
 
     df_mean.rename(columns={col_label: 'label'}, inplace=True)
-    df_mean.to_csv(RESULT_DIR / 'df_mean_atom.csv')
+    RESULT_DIR = Path(RESULT_DIR)
+    df_mean.to_csv(RESULT_DIR /'df_mean_atom.csv')
 
     return df_mean

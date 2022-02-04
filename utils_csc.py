@@ -16,7 +16,7 @@ from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 from alphacsc.utils.convolution import construct_X_multi
 
-from config import get_paths, CDL_PARAMS
+from config import CDL_PARAMS  # , get_paths
 
 # Paths for Cam-CAN dataset
 DATA_DIR = Path("/storage/store/data/")
@@ -158,7 +158,7 @@ def get_atom_df(results_dir, participants_file):
             break
 
         # load CSC results
-        cdl_model, _, allZ = pickle.load(open(file_name, "rb"))
+        cdl_model, _, allZ, _ = pickle.load(open(file_name, "rb"))
 
         # make epoch and compute dipole fit
         epochFif, transFif, bemFif = get_paths(subject_id, dal=True)
@@ -484,6 +484,7 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
 
     # ensure that only one recurring pattern will be extracted
     cdl_params['n_atoms'] = 1
+    cdl_params['n_splits'] = 1
 
     def procedure(label):
         # Reconstruct signal for a given class
@@ -511,3 +512,54 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
     df_mean.to_csv(RESULT_DIR / 'df_mean_atom.csv')
 
     return df_mean
+
+
+if __name__ == '__main__':
+    atomData = pd.read_csv('atomData.csv')
+
+    atomData.rename(columns={'Subject ID': 'subject_id',
+                             'Atom number': 'atom_id'},
+                    inplace=True)
+
+    participants = pd.read_csv("participants.tsv", sep='\t', header=0)
+    participants['subject_id'] = participants['participant_id'].apply(
+        lambda x: x[4:])
+
+    columns = ['subject_id', 'atom_id', 'Dipole GOF',
+               'Dipole Pos x', 'Dipole Pos y', 'Dipole Pos z',
+               'Dipole Ori x', 'Dipole Ori y', 'Dipole Ori z', 'Focal',
+               'Pre-Move Change', 'Post-Move Change',
+               'Post-Pre Change', 'Movement-related', 'Rebound']
+
+    atom_df_temp = pd.merge(atomData[columns], participants[[
+        'subject_id', 'age', 'sex', 'hand']], on="subject_id")
+
+    results_dir = Path('./results_csc')
+    subject_dirs = [f for f in results_dir.iterdir() if not f.is_file()]
+
+    df = pd.DataFrame()
+    for subject_dir in subject_dirs:
+        subject_id = subject_dir.name
+        base_row = {'subject_id': subject_id}
+        # get participant CSC results
+        file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+        if not file_name.exists():
+            print(f"No such file or directory: {file_name}")
+            break
+
+        # load CSC results
+        cdl_model, _, allZ, _ = pickle.load(open(file_name, "rb"))
+
+        for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
+            new_row = {**base_row, 'atom_id': int(kk), 'u_hat': u, 'v_hat': v}
+            df = df.append(new_row, ignore_index=True)
+
+    atom_df = pd.merge(atom_df_temp, df, how="left",
+                       on=["subject_id", "atom_id"])
+    atom_df.to_csv('atom_df.csv')
+
+    atom_df.rename(columns={col: col.lower().replace(' ', '_')
+                            for col in atom_df.columns},
+                   inplace=True)
+
+    atom_df.to_csv('atom_df.csv')

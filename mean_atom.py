@@ -53,8 +53,8 @@ csv_dir = OUTPUT_DIR + \
     str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
 atomGroups = pd.read_csv(csv_dir)
 
-atomGroups.rename(columns={'Subject ID': 'subject_id'}, inplace=True)
-atomGroups.rename(columns={'Atom number': 'atom_id'}, inplace=True)
+atomGroups.rename(columns={'Subject ID': 'subject_id',
+                           'Atom number': 'atom_id'}, inplace=True)
 clustering_df = atomGroups[atomGroups['Group number'].isin(group_id)]
 df_mean = get_df_mean(clustering_df, col_label='Group number',
                       cdl_params=CDL_PARAMS, results_dir=RESULTS_DIR, n_jobs=6)

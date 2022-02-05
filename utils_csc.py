@@ -21,7 +21,7 @@ from config import RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS
 
 
 def run_csc(X, **cdl_params):
-    """
+    """Run a CSC model on a given signal X.
 
     Parameters
     ----------
@@ -86,16 +86,30 @@ def get_subject_info(subject_id, participants_file=PARTICIPANTS_FILE,
 
     # get age and sex of the subject
     participants = pd.read_csv(participants_file, sep='\t', header=0)
-    age, sex = participants[participants['participant_id']
-                            == 'sub-' + str(subject_id)][['age', 'sex']].iloc[0]
+    age, sex, hand = participants[participants['participant_id']
+                                  == 'sub-' + str(subject_id)][['age', 'sex', 'hand']].iloc[0]
     if verbose:
         print(f'Subject ID: {subject_id}, {str(age)} year old {sex}')
 
-    return age, sex
+    return age, sex, hand
 
 
 def get_subject_dipole(subject_id, cdl_model=None, info=None):
-    """
+    """Compute the atoms' dipoles for a subject for a pre-computed CDL model.
+
+    Parameters
+    ----------
+    subject_id : str
+        the subject id
+
+    cdl_model : alphacsc.ConvolutionalDictionaryLearning instance
+
+    info : mne.Info instance
+
+
+    Returns
+    -------
+    dip : mne.Dipole instance
 
     """
     epochFif, transFif, bemFif = get_paths(subject_id)
@@ -136,7 +150,9 @@ def get_subject_dipole(subject_id, cdl_model=None, info=None):
 
 def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
                    participants_file=PARTICIPANTS_FILE):
-    """
+    """For a given subject, return a list of dictionary containing all atoms'
+    informations (subject info, u and v vectors, dipole informations, changes
+    in activation before and after button press).
 
     Parameters
     ----------
@@ -156,8 +172,8 @@ def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
 
     new_rows = []
     # get participant info
-    age, sex = get_subject_info(participants_file, subject_id)
-    base_row = {'subject_id': subject_id, 'age': age, 'sex': sex}
+    age, sex, hand = get_subject_info(participants_file, subject_id)
+    base_row = {'subject_id': subject_id, 'age': age, 'sex': sex, 'hand': hand}
     # get participant CSC results
     file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
     if not file_name.exists():
@@ -543,14 +559,18 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
     return df_mean
 
 
-if __name__ == '__main__':
+def complete_existing_df(atomData, results_dir=RESULTS_DIR):
+    """
+
+    """
     atomData = pd.read_csv('atomData.csv')
 
     atomData.rename(columns={'Subject ID': 'subject_id',
                              'Atom number': 'atom_id'},
                     inplace=True)
 
-    participants = pd.read_csv("participants.tsv", sep='\t', header=0)
+    # participants = pd.read_csv("participants.tsv", sep='\t', header=0)
+    participants = pd.read_csv(PARTICIPANTS_FILE, sep='\t', header=0)
     participants['subject_id'] = participants['participant_id'].apply(
         lambda x: x[4:])
 
@@ -561,9 +581,8 @@ if __name__ == '__main__':
                'Post-Pre Change', 'Movement-related', 'Rebound']
 
     atom_df_temp = pd.merge(atomData[columns], participants[[
-        'subject_id', 'age', 'sex', 'hand']], on="subject_id")
+        'subject_id', 'age', 'sex', 'hand']], how="left", on="subject_id")
 
-    results_dir = Path('./results_csc')
     subject_dirs = [f for f in results_dir.iterdir() if not f.is_file()]
 
     df = pd.DataFrame()
@@ -577,7 +596,7 @@ if __name__ == '__main__':
             break
 
         # load CSC results
-        cdl_model, _, allZ, _ = pickle.load(open(file_name, "rb"))
+        cdl_model, _, _, _ = pickle.load(open(file_name, "rb"))
 
         for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
             new_row = {**base_row, 'atom_id': int(kk), 'u_hat': u, 'v_hat': v}
@@ -585,10 +604,14 @@ if __name__ == '__main__':
 
     atom_df = pd.merge(atom_df_temp, df, how="left",
                        on=["subject_id", "atom_id"])
-    atom_df.to_csv('atom_df.csv')
-
     atom_df.rename(columns={col: col.lower().replace(' ', '_')
                             for col in atom_df.columns},
                    inplace=True)
+    atom_df.to_csv('all_atoms_info.csv')
 
-    atom_df.to_csv('atom_df.csv')
+    return atom_df
+
+
+if __name__ == '__main__':
+    atomData = pd.read_csv(RESULTS_DIR / 'atomData.csv')
+    all_atoms_info = complete_existing_df(atomData)

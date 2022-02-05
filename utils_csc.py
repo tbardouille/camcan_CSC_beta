@@ -16,43 +16,8 @@ from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 from alphacsc.utils.convolution import construct_X_multi
 
-from config import CDL_PARAMS  # , get_paths
-
-# Paths for Cam-CAN dataset
-DATA_DIR = Path("/storage/store/data/")
-BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
-PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
-
-fifFile = '/transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif'
-EPOCH_DIR = '/home/timb/camcan/proc_data/TaskSensorAnalysis_transdef/'
-
-DATA_DIR = Path("/storage/store/data/")
-BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
-TRANS_DIR = DATA_DIR / "camcan-mne/trans"
-
-RESULT_DIR = ''  # XXX
-
-
-def get_paths(subject_id, dal=True):
-    if dal:
-        # Files for dipole fitting
-        subjectsDir = '/home/timb/camcan/subjects'
-        transFif = subjectsDir + '/coreg/sub-' + subject_id + '-trans.fif'
-        bemFif = subjectsDir + '/sub-' + subject_id + '/bem/sub-' + \
-            subject_id + '-5120-bem-sol.fif'
-        fifFile = '/transdef_transrest_mf2pt2_task_raw_buttonPress_duration=3.4s_cleaned-epo.fif'
-        epochFif = '/home/timb/camcan/proc_data/TaskSensorAnalysis_transdef/' + \
-            subject_id + fifFile
-    else:
-        # XXX find the good paths for Parital drago server
-        bemFif = BEM_DIR / subject_id / \
-            'bem' / (subject_id + '-meg-bem.fif')
-        subjectsDir + '/sub-' + subject_id + \
-            '/bem/sub-' + subject_id + '-5120-bem-sol.fif'
-        transFif = TRANS_DIR / ('sub-' + subject_id + '-trans.fif')
-        epochFif = EPOCH_DIR + subject_id + fifFile
-
-    return epochFif, transFif, bemFif
+from config import CDL_PARAMS, get_paths
+from config import RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS
 
 
 def run_csc(X, **cdl_params):
@@ -97,12 +62,16 @@ def run_csc(X, **cdl_params):
     return cdl_model, z_hat_
 
 
-def get_subject_info(participants_file, subject_id, verbose=False):
+def get_subject_info(subject_id, participants_file=PARTICIPANTS_FILE,
+                     verbose=False):
     """For a given subject id, return its age and sex found in the csv
     containing all participant info.
 
     Parameters
     ----------
+    subject_id : str
+        the subject id
+
     participants_file : str | Pathlib instance
         Path to csv containing all participants info
 
@@ -125,7 +94,109 @@ def get_subject_info(participants_file, subject_id, verbose=False):
     return age, sex
 
 
-def get_atom_df(results_dir, participants_file):
+def get_subject_dipole(subject_id, cdl_model=None, info=None):
+    """
+
+    """
+    epochFif, transFif, bemFif = get_paths(subject_id)
+    if (cdl_model is None) or (info is None):
+        # get participant CSC results
+        file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+        if not file_name.exists():
+            print(f"No such file or directory: {file_name}")
+            return
+        # load CSC results
+        cdl_model, info, _, _ = pickle.load(open(file_name, "rb"))
+    # compute noise covariance
+    cov = mne.make_ad_hoc_cov(info)
+    # select only grad channels
+    meg_indices = mne.pick_types(info, meg='grad')
+    info = mne.pick_info(info, meg_indices)
+    evoked = mne.EvokedArray(cdl_model.u_hat_.T, info)
+    # compute dipole fit
+    dip = mne.fit_dipole(evoked, cov, str(bemFif), str(transFif), n_jobs=6,
+                         verbose=False)[0]
+
+    # in DAL code
+    # # Fit a dipole for each atom
+    # # Read in epochs for task data
+    # epochs = mne.read_epochs(epochFif)
+    # epochs.pick_types(meg='grad')
+    # cov = mne.compute_covariance(epochs)
+    # info = epochs.info
+
+    # # Make an evoked object with all atom topographies for dipole fitting
+    # evoked = mne.EvokedArray(cdl_model.u_hat_.T, info)
+
+    # # Fit dipoles
+    # dip = mne.fit_dipole(evoked, cov, bemFif, transFif, verbose=False)[0]
+
+    return dip
+
+
+def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
+                   participants_file=PARTICIPANTS_FILE):
+    """
+
+    Parameters
+    ----------
+    subject_id : str
+        the subject id
+
+    results_dir : Pathlib instance
+        Path to all participants CSC pickled results
+
+    participants_file : str | Pathlib instance
+        Path to csv containing all participants info
+
+    Returns
+    -------
+    new_rows : list of dict
+    """
+
+    new_rows = []
+    # get participant info
+    age, sex = get_subject_info(participants_file, subject_id)
+    base_row = {'subject_id': subject_id, 'age': age, 'sex': sex}
+    # get participant CSC results
+    file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+    if not file_name.exists():
+        print(f"No such file or directory: {file_name}")
+        return
+    # load CSC results
+    cdl_model, info, allZ, _ = pickle.load(open(file_name, "rb"))
+    # compute dipole fit
+    dip = get_subject_dipole(subject_id, cdl_model, info)
+    for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
+        # get dipole informations
+        gof = dip.gof[kk]  # dipole goodness of fit
+        pos = dip.pos[kk]  # 3-element list (index to x, y, z)
+        ori = dip.ori[kk]  # 3-element list (index to x, y, z)
+        # calculate the percent change in activation between different phases
+        # of movement
+        # -1.25 to -0.25 sec (150 samples)
+        pre_sum = np.sum(allZ[:, kk, 68:218])
+        # -0.25 to 0.25 sec (75 samples)
+        move_sum = np.sum(allZ[:, kk, 218:293])
+        # 0.25 to 1.25 sec (150 samples)
+        post_sum = np.sum(allZ[:, kk, 293:443])
+        # multiply by 2 for movement phase because there are half as many samples
+        z1 = (pre_sum-move_sum * 2) / pre_sum
+        z2 = (post_sum-move_sum * 2) / post_sum
+        z3 = (post_sum-pre_sum) / post_sum
+        # update dataframe
+        new_row = {
+            **base_row, 'atom_id': int(kk),
+            'u_hat': u, 'v_hat': v, 'dipole_gof': gof,
+            'dipole_pos_x': pos[0], 'dipole_pos_y': pos[1], 'dipole_pos_z': pos[2],
+            'dipole_ori_x': ori[0], 'dipole_ori_y': ori[1], 'dipole_ori_z': ori[2],
+            'pre-move_change': z1, 'post-move_change': z2, 'post-pre_change': z3}
+        new_rows.append(new_row)
+
+    return new_rows
+
+
+def get_atom_df(results_dir=RESULTS_DIR, save=True):
     """ Create a pandas.DataFrame where each row is an atom, and columns are
     crutial informations, such a the subject id, its u and v vectors as well
     as the participant age and sex.
@@ -135,8 +206,9 @@ def get_atom_df(results_dir, participants_file):
     results_dir : Pathlib instance
         Path to all participants CSC pickled results
 
-    participants_file : str | Pathlib instance
-        Path to csv containing all participants info
+    save : bool
+        if True, save output dataframe as csv
+        defaults to True
 
     Returns
     -------
@@ -145,71 +217,22 @@ def get_atom_df(results_dir, participants_file):
 
     subject_dirs = [f for f in results_dir.iterdir() if not f.is_file()]
 
+    new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
+        delayed(get_atoms_info)(this_subject_dir.name)
+        for this_subject_dir in subject_dirs)
+
     df = pd.DataFrame()
-    for subject_dir in subject_dirs:
-        subject_id = subject_dir.name
-        # get participant info
-        age, sex = get_subject_info(participants_file, subject_id)
-        base_row = {'subject_id': subject_id, 'age': age, 'sex': sex}
-        # get participant CSC results
-        file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
-        if not file_name.exists():
-            print(f"No such file or directory: {file_name}")
-            break
+    for this_new_row in new_rows:
+        df = df.append(this_new_row, ignore_index=True)
 
-        # load CSC results
-        cdl_model, _, allZ, _ = pickle.load(open(file_name, "rb"))
-
-        # make epoch and compute dipole fit
-        epochFif, transFif, bemFif = get_paths(subject_id, dal=True)
-        # Read in epochs for task data
-        epochs = mne.read_epochs(epochFif)
-        epochs.pick_types(meg='grad')
-        info = epochs.info
-        cov = mne.compute_covariance(epochs)
-
-        # Make an evoked object with all atom topographies for dipole fitting
-        evoked = mne.EvokedArray(cdl_model.u_hat_.T, info)
-        # compute dipole fit
-        dip = mne.fit_dipole(evoked, cov, bemFif,
-                             transFif,  verbose=False)[0]
-
-        for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
-            gof = dip.gof[kk]
-            pos = dip.pos[kk]  # 3-element list (index to x, y, z)
-            ori = dip.ori[kk]  # 3-element list (index to x, y, z)
-            # calculate the percent change in activation between different
-            # phases of movement
-            pre = allZ[:, kk, 68:218]  # -1.25 to -0.25 sec (150 samples)
-            move = allZ[:, kk, 218:293]  # -0.25 to 0.25 sec (75 samples)
-            # 0.25 to 1.25 sec (150 samples)
-            post = allZ[:, kk, 293:443]
-
-            pre_sum = np.sum(pre)
-            move_sum = np.sum(move)
-            post_sum = np.sum(post)
-            # multiply by 2 for movement phase because there are half as many samples
-            z1 = (pre_sum-move_sum*2)/pre_sum
-            z2 = (post_sum-move_sum*2)/post_sum
-            z3 = (post_sum-pre_sum)/post_sum
-            # update dataframe
-            new_row = {**base_row, 'atom_id': int(kk), 'u_hat': u, 'v_hat': v,
-                       'Dipole GOF': gof, 'Dipole Pos x': pos[0],
-                       'Dipole Pos y': pos[1], 'Dipole Pos z': pos[2],
-                       'Dipole Ori x': ori[0], 'Dipole Ori y': ori[1],
-                       'Dipole Ori z': ori[2],
-                       'Pre-Move Change': z1,
-                       'Post-Move Change': z2,
-                       'Post-Pre Change': z3}
-            df = df.append(new_row, ignore_index=True)
+    if save:
+        df.to_csv(results_dir / 'all_atoms_info.csv')
 
     return df
 
 
-OUTPUT_DIR = '/media/NAS/lpower/CSC/results/u_'
-
-
-def correlation_clustering_atoms(atom_df, threshold=0.4, output_dir=OUTPUT_DIR):
+def correlation_clustering_atoms(atom_df, threshold=0.4,
+                                 output_dir=RESULTS_DIR):
     """
 
     Parameters
@@ -269,14 +292,16 @@ def correlation_clustering_atoms(atom_df, threshold=0.4, output_dir=OUTPUT_DIR):
         max_corr = 0
         max_group = 0
 
-        # Loops through the existing groups and calculates the atom's average correlation to that group
+        # Loops through the existing groups and calculates the atom's average
+        # correlation to that group
         for group in range(0, groupNum + 1):
             gr_atoms = atomGroups[atomGroups['Group number'] == group]
             inds = gr_atoms['Index'].tolist()
             u_groups = []
             v_groups = []
 
-            # Find the u vector and correlation coefficient comparing the current atom to each atom in the group
+            # Find the u vector and correlation coefficient comparing the
+            # current atom to each atom in the group
             for ind2 in inds:
                 u_coef = u_coefs[ii][ind2]
                 u_groups.append(u_coef)
@@ -294,17 +319,20 @@ def correlation_clustering_atoms(atom_df, threshold=0.4, output_dir=OUTPUT_DIR):
             # check if this group passes the thresholds
             if (avg_u > u_thresh) & (avg_v > v_thresh):
                 unique = False
-                # If it does, also check if this is the highest cumulative correlation so far
+                # If it does, also check if this is the highest cumulative
+                # correlation so far
                 if (avg_u + avg_v) > max_corr:
                     max_corr = (avg_u + avg_v)
                     max_group = group
 
-        # If the atom was similar to at least one group, sorts it into the group that it had the highest cumulative correlation to
+        # If the atom was similar to at least one group, sorts it into the
+        # group that it had the highest cumulative correlation to
         if (unique == False):
             groupDict = {'subject_id': subject_id, 'atom_id': atom_id,
                          'Index': ii, 'Group number': max_group}
 
-        # If a similar group is not found, a new group is create and the current atom is added to that group
+        # If a similar group is not found, a new group is create and the
+        # current atom is added to that group
         elif (unique == True):
             groupNum += 1
             print(groupNum)
@@ -354,18 +382,19 @@ def correlation_clustering_atoms(atom_df, threshold=0.4, output_dir=OUTPUT_DIR):
     numSubs_list = np.asarray(numSubs_list)
     topGroups = len(np.where(numSubs_list >= 12)[0])
     threshold_dict = {'Threshold': threshold,
-                      'Number of Groups': numGroups, 'Number of Top Groups': topGroups}
+                      'Number of Groups': numGroups,
+                      'Number of Top Groups': topGroups}
     threshold_summary = threshold_summary.append(
         threshold_dict, ignore_index=True)
 
     # Save group summary dataframe
     csv_dir = output_dir + \
-        str(u_thresh) + '_v_' + str(v_thresh) + '_groupSummary.csv'
+        'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_groupSummary.csv'
     groupSummary.to_csv(csv_dir)
 
     # Save atomGroups to dataframe
     csv_dir = output_dir + \
-        str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
+        'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
     atomGroups.to_csv(csv_dir)
 
     return groupSummary, atomGroups
@@ -445,7 +474,7 @@ def reconstruct_class_signal(df, results_dir):
 
 
 def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
-                results_dir=RESULT_DIR, n_jobs=6):
+                results_dir=RESULTS_DIR, n_jobs=N_JOBS):
     """
 
     Parameters
@@ -471,7 +500,6 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
 
     n_jobs : int
         number of concurrently running jobs
-        default is 6
 
     Returns
     -------
@@ -483,8 +511,7 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
     """
 
     # ensure that only one recurring pattern will be extracted
-    cdl_params['n_atoms'] = 1
-    cdl_params['n_splits'] = 1
+    cdl_params.update(n_atoms=1, n_splits=1)
 
     def procedure(label):
         # Reconstruct signal for a given class
@@ -508,8 +535,10 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
     for new_row in new_rows:
         df_mean = df_mean.append(new_row, ignore_index=True)
 
+    print(df_mean)
+
     df_mean.rename(columns={col_label: 'label'}, inplace=True)
-    df_mean.to_csv(RESULT_DIR / 'df_mean_atom.csv')
+    df_mean.to_csv(results_dir / 'df_mean_atom.csv')
 
     return df_mean
 

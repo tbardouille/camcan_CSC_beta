@@ -17,10 +17,14 @@ from matplotlib import pyplot as plt
 from joblib import Memory, Parallel, delayed
 
 import mne
+from utils_csc import get_atom_df, correlation_clustering_atoms, get_df_mean
+from utils_plot import plot_mean_atom
+from config import CDL_PARAMS, RESULTS_DIR, PARTICIPANTS_FILE
 
 from utils_csc import get_atom_df, correlation_clustering_atoms, get_df_mean
 from utils_plot import plot_mean_atom
 from config import CDL_PARAMS, RESULTS_DIR, PARTICIPANTS_FILE  # , get_paths
+
 
 # %%
 # read clustering results
@@ -42,18 +46,16 @@ groupSummary = pd.read_csv(csv_dir)
 threshold_group = .25
 total_subjects = groupSummary['Number of Atoms'].sum() / 20
 group_id = groupSummary[groupSummary['Number of Subjects']
-                        > threshold * total_subjects]['Group Number'].values
-
+                        > threshold_group * total_subjects]['Group Number'].values
+print(total_subjects)
 # Save atomGroups to dataframe
 csv_dir = OUTPUT_DIR + \
     str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
 atomGroups = pd.read_csv(csv_dir)
 
-clustering_df = atomGroups[atomGroups['Group number'].isin(group_id)]
 atomGroups.rename(columns={'Subject ID': 'subject_id'}, inplace=True)
 atomGroups.rename(columns={'Atom number': 'atom_id'}, inplace=True)
-
-
+clustering_df = atomGroups[atomGroups['Group number'].isin(group_id)]
 df_mean = get_df_mean(clustering_df, col_label='Group number',
                       cdl_params=CDL_PARAMS, results_dir=RESULTS_DIR, n_jobs=6)
 

@@ -2,24 +2,26 @@ import numpy as np
 from pathlib import Path
 
 
-TEAM = 'dal'  # 'DAL' | 'parietal
+TEAM = 'dal'  # 'dal' | 'parietal
 
 if TEAM == 'parietal':
     # path to CSC results
     RESULTS_DIR = Path('./results_csc')
     # Paths for Cam-CAN dataset
     DATA_DIR = Path("/storage/store/data/")
-    BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # Root path to raw BIDS files
+    BIDS_ROOT = DATA_DIR / "camcan/BIDSsep/smt/"  # root path to raw BIDS files
+    SSS_CAL_FILE = DATA_DIR / "camcan-mne/Cam-CAN_sss_cal.dat"
+    CT_SPARSE_FILE = DATA_DIR / "camcan-mne/Cam-CAN_ct_sparse.fif"
     PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
+    HOME_DIR = Path('.')
 
-    BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
-    TRANS_DIR = DATA_DIR / "camcan-mne/trans"
-
-elif TEAM == 'DAL':
+elif TEAM == 'dal':
+    # path to CSC results
     RESULTS_DIR = Path('/media/NAS/lpower/CSC/results/')
+    # Paths for Cam-CAN dataset
     DATA_DIR = Path(
         "/media/WDEasyStore/timb/camcan/release05/cc700/meg/pipeline/release005/")
-    BIDS_ROOT = DATA_DIR / "BIDSsep/smt/"  # Root path to raw BIDS files
+    BIDS_ROOT = DATA_DIR / "BIDSsep/smt/"  # root path to raw BIDS files
     SSS_CAL_FILE = Path(
         "/home/timb/camcan/camcanMEGcalibrationFiles/sss_cal.dat")
     CT_SPARSE_FILE = Path(
@@ -40,6 +42,9 @@ def get_paths(subject_id, team=TEAM):
             subject_id + fifFile
 
     elif team == 'parietal':
+        BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
+        TRANS_DIR = DATA_DIR / "camcan-mne/trans"
+
         # XXX find the good paths for Parital drago server
         bemFif = BEM_DIR / subject_id / \
             'bem' / (subject_id + '-meg-bem.fif')
@@ -54,7 +59,7 @@ def get_paths(subject_id, team=TEAM):
 
 # hare all the global variables
 EXP_PARAMS = {
-    "sfreq": 150.,            # 300
+    "sfreq": 150.,             # 300
     "atom_duration": 0.5,      # 0.5,
     "n_atoms": 20,             # 25,
     "reg": 0.2,                # 0.2,
@@ -66,13 +71,16 @@ CDL_PARAMS = {
     'n_atoms': EXP_PARAMS['n_atoms'],
     'n_times_atom': int(np.round(EXP_PARAMS["atom_duration"] * EXP_PARAMS['sfreq'])),
     'rank1': True, 'uv_constraint': 'separate',
-    'window': True,  # in Tim's: False
-    'unbiased_z_hat': True,  # in Tim's: False
+    'window': True,
+    'unbiased_z_hat': True,
     'D_init': 'chunk',
-    'lmbd_max': 'scaled', 'reg': EXP_PARAMS['reg'],
-    'n_iter': 100, 'eps': EXP_PARAMS['eps'],
+    'lmbd_max': 'scaled',
+    'reg': EXP_PARAMS['reg'],
+    'n_iter': 100,
+    'eps': EXP_PARAMS['eps'],
     'solver_z': 'lgcd',
-    'solver_z_kwargs': {'tol': EXP_PARAMS['tol_z'], 'max_iter': 1000},
+    'solver_z_kwargs': {'tol': EXP_PARAMS['tol_z'],
+                        'max_iter': 1000},
     'solver_d': 'alternate_adaptive',
     'solver_d_kwargs': {'max_iter': 300},
     'sort_atoms': True,

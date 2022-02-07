@@ -2,7 +2,8 @@ import numpy as np
 from pathlib import Path
 
 
-TEAM = 'dal'  # 'dal' | 'parietal
+TEAM = 'cedric'  # 'dal' | 'parietal' | 'cedric'
+N_JOBS = 6
 
 if TEAM == 'parietal':
     # path to CSC results
@@ -28,6 +29,11 @@ elif TEAM == 'dal':
         "/home/timb/camcan/camcanMEGcalibrationFiles/ct_sparse.fif")
     PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
     HOME_DIR = Path("/media/NAS/lpower/CSC/")
+
+elif TEAM == 'cedric':
+    # path to CSC results
+    RESULTS_DIR = Path('./results_csc')
+    PARTICIPANTS_FILE = Path("./participants.tsv")
 
 
 def get_paths(subject_id, team=TEAM):

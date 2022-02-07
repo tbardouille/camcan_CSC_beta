@@ -608,6 +608,7 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
                             for col in atom_df.columns},
                    inplace=True)
     atom_df.to_csv('all_atoms_info.csv')
+    pickle.dump(atom_df, open('all_atoms_info.pkl', "wb"))
 
     return atom_df
 

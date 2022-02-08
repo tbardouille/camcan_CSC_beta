@@ -96,3 +96,8 @@ CDL_PARAMS = {
     'n_splits': 10,
     'n_jobs': 5
 }
+
+
+def get_cdl_pickle_name():
+    return 'CSCraw_' + str(EXP_PARAMS['atom_duration']) + 's_' + \
+        str(CDL_PARAMS['n_atoms']) + 'atoms.pkl'

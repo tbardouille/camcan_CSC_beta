@@ -1,5 +1,5 @@
 """
-Utils scripts for utils functions 
+Utils scripts for utils functions
 """
 from codecs import ignore_errors
 import scipy.signal as ss
@@ -12,12 +12,72 @@ import pickle
 from joblib import Memory, Parallel, delayed
 
 import mne
+from mne_bids import BIDSPath, read_raw_bids
+
 from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 from alphacsc.utils.convolution import construct_X_multi
 
-from config import CDL_PARAMS, get_paths
+from config import CDL_PARAMS, get_paths, get_cdl_pickle_name
+from config import BIDS_ROOT, SSS_CAL_FILE, CT_SPARSE_FILE
 from config import RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS
+
+
+def get_raw(subject_id, ch_type='grad', sfreq=150.):
+    """
+
+
+    """
+
+    if subject_id[:4] == 'sub-':
+        subject_id = subject_id.split('-')[1]
+
+    # Read raw data from BIDS file
+    bp = BIDSPath(
+        root=BIDS_ROOT,
+        subject=subject_id,
+        task="smt",
+        datatype="meg",
+        extension=".fif",
+        session="smt",
+    )
+    raw = read_raw_bids(bp)
+
+    # Preprocess data
+    raw.load_data()
+    raw.filter(l_freq=None, h_freq=125)
+    raw.notch_filter([50, 100])
+    raw = mne.preprocessing.maxwell_filter(raw, calibration=SSS_CAL_FILE,
+                                           cross_talk=CT_SPARSE_FILE,
+                                           st_duration=10.0)
+    # Now deal with Epochs
+    all_events, all_event_id = mne.events_from_annotations(raw)
+    # all_event_id = {'audiovis/1200Hz': 1, 'audiovis/300Hz': 2, 'audiovis/600Hz': 3,
+    #                 'button': 4, 'catch/0': 5, 'catch/1': 6}
+
+    metadata, events, event_id = mne.epochs.make_metadata(
+        events=all_events, event_id=all_event_id,
+        tmin=-3., tmax=0, sfreq=raw.info['sfreq'],
+        row_events=['button'], keep_last=['audiovis'])
+
+    epochs = mne.Epochs(
+        raw, events, event_id, metadata=metadata,
+        tmin=-1.7, tmax=1.7,
+        baseline=(-1.25, -1.0),
+        preload=True, verbose=False
+    )
+
+    # "good" button events: button event is at most one sec. after an audiovis
+    # event, and with at least 3 sec. between 2 button events.
+    epochs = epochs["event_name == 'button' and audiovis > -1. and button == 0."]
+
+    # Band-pass filter the data to a range of interest
+    raw.pick([ch_type, 'stim'])
+    raw.filter(l_freq=2, h_freq=45)
+    raw, events = raw.resample(
+        sfreq, npad='auto', verbose=False, events=epochs.events)
+
+    return raw, events
 
 
 def run_csc(X, **cdl_params):
@@ -64,7 +124,7 @@ def run_csc(X, **cdl_params):
 
 def get_subject_info(subject_id, participants_file=PARTICIPANTS_FILE,
                      verbose=False):
-    """For a given subject id, return its age and sex found in the csv
+    """For a given subject id, return its age, sex and hand found in the csv
     containing all participant info.
 
     Parameters
@@ -75,13 +135,18 @@ def get_subject_info(subject_id, participants_file=PARTICIPANTS_FILE,
     participants_file : str | Pathlib instance
         Path to csv containing all participants info
 
+    verbose : bool
+        if True, will print obtained info
+
     Returns
     -------
     age : float
         the age of the considered participant
 
     sex : str
-        the sex (MALE or FEMALE) of the considered participant
+        the sex (MALE | FEMALE) of the considered participant
+
+    hand 
     """
 
     # get age and sex of the subject
@@ -115,7 +180,7 @@ def get_subject_dipole(subject_id, cdl_model=None, info=None):
     epochFif, transFif, bemFif = get_paths(subject_id)
     if (cdl_model is None) or (info is None):
         # get participant CSC results
-        file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+        file_name = RESULTS_DIR / subject_id / get_cdl_pickle_name()
         if not file_name.exists():
             print(f"No such file or directory: {file_name}")
             return
@@ -175,7 +240,7 @@ def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
     age, sex, hand = get_subject_info(participants_file, subject_id)
     base_row = {'subject_id': subject_id, 'age': age, 'sex': sex, 'hand': hand}
     # get participant CSC results
-    file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+    file_name = results_dir / subject_id / get_cdl_pickle_name()
     if not file_name.exists():
         print(f"No such file or directory: {file_name}")
         return
@@ -466,7 +531,7 @@ def reconstruct_class_signal(df, results_dir):
     D_temp = []
     min_n_times_valid = np.inf
     for subject_id in set(df['subject_id'].values):
-        file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+        file_name = results_dir / subject_id / get_cdl_pickle_name()
         cdl_model, info, _, _ = pickle.load(open(file_name, "rb"))
         atom_idx = df[df['subject_id'] ==
                       subject_id]['atom_id'].values.astype(int)
@@ -590,7 +655,7 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
         subject_id = subject_dir.name
         base_row = {'subject_id': subject_id}
         # get participant CSC results
-        file_name = results_dir / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+        file_name = results_dir / subject_id / get_cdl_pickle_name()
         if not file_name.exists():
             print(f"No such file or directory: {file_name}")
             break

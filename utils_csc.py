@@ -235,44 +235,46 @@ def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
     new_rows : list of dict
     """
 
-    new_rows = []
-    # get participant info
-    age, sex, hand = get_subject_info(participants_file, subject_id)
-    base_row = {'subject_id': subject_id, 'age': age, 'sex': sex, 'hand': hand}
     # get participant CSC results
     file_name = results_dir / subject_id / get_cdl_pickle_name()
     if not file_name.exists():
         print(f"No such file or directory: {file_name}")
         return
+
     # load CSC results
     cdl_model, info, allZ, _ = pickle.load(open(file_name, "rb"))
-    # compute dipole fit
-    dip = get_subject_dipole(subject_id, cdl_model, info)
+
+    # get informations about the subject
+    age, sex, hand = get_subject_info(subject_id, PARTICIPANTS_FILE)
+    base_row = {'subject_id': subject_id, 'age': age, 'sex': sex, 'hand': hand}
+    # get informations about atoms
+    dip = get_subject_dipole(subject_id, cdl_model, info=info)
+
+    new_rows = []
     for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
-        # get dipole informations
-        gof = dip.gof[kk]  # dipole goodness of fit
-        pos = dip.pos[kk]  # 3-element list (index to x, y, z)
-        ori = dip.ori[kk]  # 3-element list (index to x, y, z)
-        # calculate the percent change in activation between different phases
-        # of movement
+        gof, pos, ori = dip.gof[kk], dip.pos[kk], dip.ori[kk]
+
+        # calculate the percent change in activation between different phases of movement
         # -1.25 to -0.25 sec (150 samples)
         pre_sum = np.sum(allZ[:, kk, 68:218])
         # -0.25 to 0.25 sec (75 samples)
         move_sum = np.sum(allZ[:, kk, 218:293])
         # 0.25 to 1.25 sec (150 samples)
         post_sum = np.sum(allZ[:, kk, 293:443])
+
         # multiply by 2 for movement phase because there are half as many samples
-        z1 = (pre_sum-move_sum * 2) / pre_sum
-        z2 = (post_sum-move_sum * 2) / post_sum
-        z3 = (post_sum-pre_sum) / post_sum
-        # update dataframe
-        new_row = {
-            **base_row, 'atom_id': int(kk),
-            'u_hat': u, 'v_hat': v, 'dipole_gof': gof,
+        z1 = (pre_sum - 2 * move_sum) / pre_sum
+        z2 = (post_sum - 2 * move_sum) / post_sum
+        z3 = (post_sum - pre_sum) / post_sum
+
+        new_rows.append({
+            **base_row, 'atom_id': kk, 'u_hat': u, 'v_hat': v, 'dipole_gof': gof,
             'dipole_pos_x': pos[0], 'dipole_pos_y': pos[1], 'dipole_pos_z': pos[2],
             'dipole_ori_x': ori[0], 'dipole_ori_y': ori[1], 'dipole_ori_z': ori[2],
-            'pre-move_change': z1, 'post-move_change': z2, 'post-pre_change': z3}
-        new_rows.append(new_row)
+            'pre-move_change': z1, 'post-move_change': z2, 'post-pre_change': z3,
+            'focal': (gof >= 95), 'rebound': (z3 >= 0.1),
+            'movement_related': (z1 >= 0. and z2 >= 0.6)
+        })
 
     return new_rows
 

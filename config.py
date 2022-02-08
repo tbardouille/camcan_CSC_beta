@@ -35,6 +35,10 @@ elif TEAM == 'cedric':
     RESULTS_DIR = Path('./results_csc')
     PARTICIPANTS_FILE = Path("./participants.tsv")
 
+# list of all Can-CAN subject ids
+SUBJECT_IDS = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
+               (not f.is_file()) and (f.name[:6] == 'sub-CC')]
+
 
 def get_paths(subject_id, team=TEAM):
     if team == 'dal':

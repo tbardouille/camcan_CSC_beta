@@ -298,7 +298,8 @@ def get_atom_df(subject_ids=SUBJECT_IDS, results_dir=RESULTS_DIR, save=True):
     """
 
     new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
-        delayed(get_atoms_info)(this_subject_id) for this_subject_id in subject_ids)
+        delayed(get_atoms_info)(this_subject_id)
+        for this_subject_id in subject_ids)
 
     df = pd.DataFrame()
     for this_new_row in new_rows:

@@ -50,4 +50,4 @@ Parallel(n_jobs=N_JOBS, verbose=1)(
     delayed(procedure)(this_subject_id) for this_subject_id in SUBJECT_IDS)
 
 # from the CDL results, save in a dataframe info about all atoms
-atom_df = get_atom_df(results_dir=RESULTS_DIR, save=True)
+atom_df = get_atom_df(SUBJECT_IDS, results_dir=RESULTS_DIR, save=True)

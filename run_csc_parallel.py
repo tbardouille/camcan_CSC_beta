@@ -12,14 +12,13 @@ from alphacsc.viz.epoch import make_epochs
 
 from config import (BIDS_ROOT, RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS,
                     CDL_PARAMS, EXP_PARAMS, get_cdl_pickle_name)
-from utils_csc import get_raw, run_csc, get_atoms_info
+from utils_csc import get_raw, run_csc, get_atom_df
 
 mem = Memory('.')
 
 
 def procedure(subject_id):
     """
-
 
     """
     # get preprocessed raw and events
@@ -44,20 +43,14 @@ def procedure(subject_id):
     with open(subject_res_dir / 'exp_params', 'w') as fp:
         json.dump([EXP_PARAMS, CDL_PARAMS], fp, sort_keys=True, indent=4)
 
-    new_rows = get_atoms_info(subject_id, RESULTS_DIR, PARTICIPANTS_FILE)
-
-    return new_rows
+    return None
 
 
 SUBJECT_ID = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
               (not f.is_file()) and (f.name[:6] == 'sub-CC')]
 
-new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
+Parallel(n_jobs=N_JOBS, verbose=1)(
     delayed(procedure)(this_subject_id) for this_subject_id in SUBJECT_ID)
 
-df_res = pd.DataFrame()
-for new_row in new_rows:
-    df_res = df_res.append(new_row, ignore_index=True)
-
-# df_res.to_csv(RESULTS_DIR / 'atoms_cdl_res.csv')
-pickle.dump(df_res, open(RESULTS_DIR / 'atoms_cdl_res.pkl', "wb"))
+# from the CDL results, save in a dataframe info about all atoms
+get_atom_df(results_dir=RESULTS_DIR, save=True)

@@ -298,11 +298,11 @@ def get_atom_df(results_dir=RESULTS_DIR, save=True):
     pandas.DataFrame
     """
 
-    subject_dirs = [f for f in results_dir.iterdir() if not f.is_file()]
+    SUBJECT_ID = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
+                  (not f.is_file()) and (f.name[:6] == 'sub-CC')]
 
     new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
-        delayed(get_atoms_info)(this_subject_dir.name)
-        for this_subject_dir in subject_dirs)
+        delayed(get_atoms_info)(this_subject_id) for this_subject_id in SUBJECT_ID)
 
     df = pd.DataFrame()
     for this_new_row in new_rows:
@@ -310,6 +310,7 @@ def get_atom_df(results_dir=RESULTS_DIR, save=True):
 
     if save:
         df.to_csv(results_dir / 'all_atoms_info.csv')
+        pickle.dump(df, open(results_dir / 'all_atoms_info.pkl', "wb"))
 
     return df
 

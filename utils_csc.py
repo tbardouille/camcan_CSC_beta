@@ -18,7 +18,7 @@ from alphacsc import BatchCDL, GreedyCDL
 from alphacsc.utils.signal import split_signal
 from alphacsc.utils.convolution import construct_X_multi
 
-from config import CDL_PARAMS, get_paths, get_cdl_pickle_name
+from config import CDL_PARAMS, SUBJECT_IDS, get_paths, get_cdl_pickle_name
 from config import BIDS_ROOT, SSS_CAL_FILE, CT_SPARSE_FILE
 from config import RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS
 
@@ -213,8 +213,7 @@ def get_subject_dipole(subject_id, cdl_model=None, info=None):
     return dip
 
 
-def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
-                   participants_file=PARTICIPANTS_FILE):
+def get_atoms_info(subject_id, results_dir=RESULTS_DIR):
     """For a given subject, return a list of dictionary containing all atoms'
     informations (subject info, u and v vectors, dipole informations, changes
     in activation before and after button press).
@@ -226,9 +225,6 @@ def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
 
     results_dir : Pathlib instance
         Path to all participants CSC pickled results
-
-    participants_file : str | Pathlib instance
-        Path to csv containing all participants info
 
     Returns
     -------
@@ -279,13 +275,16 @@ def get_atoms_info(subject_id, results_dir=RESULTS_DIR,
     return new_rows
 
 
-def get_atom_df(results_dir=RESULTS_DIR, save=True):
+def get_atom_df(subject_ids=SUBJECT_IDS, results_dir=RESULTS_DIR, save=True):
     """ Create a pandas.DataFrame where each row is an atom, and columns are
     crutial informations, such a the subject id, its u and v vectors as well
     as the participant age and sex.
 
     Parameters
     ----------
+    subject_ids : list of str
+        list of subject ids to which we want to collect their atoms' info
+
     results_dir : Pathlib instance
         Path to all participants CSC pickled results
 
@@ -298,11 +297,8 @@ def get_atom_df(results_dir=RESULTS_DIR, save=True):
     pandas.DataFrame
     """
 
-    SUBJECT_ID = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
-                  (not f.is_file()) and (f.name[:6] == 'sub-CC')]
-
     new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
-        delayed(get_atoms_info)(this_subject_id) for this_subject_id in SUBJECT_ID)
+        delayed(get_atoms_info)(this_subject_id) for this_subject_id in subject_ids)
 
     df = pd.DataFrame()
     for this_new_row in new_rows:

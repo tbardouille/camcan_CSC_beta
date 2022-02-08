@@ -10,7 +10,7 @@ from joblib import Memory, Parallel, delayed
 
 from alphacsc.viz.epoch import make_epochs
 
-from config import (BIDS_ROOT, RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS,
+from config import (RESULTS_DIR, SUBJECT_IDS, N_JOBS,
                     CDL_PARAMS, EXP_PARAMS, get_cdl_pickle_name)
 from utils_csc import get_raw, run_csc, get_atom_df
 
@@ -46,11 +46,8 @@ def procedure(subject_id):
     return None
 
 
-SUBJECT_ID = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
-              (not f.is_file()) and (f.name[:6] == 'sub-CC')]
-
 Parallel(n_jobs=N_JOBS, verbose=1)(
-    delayed(procedure)(this_subject_id) for this_subject_id in SUBJECT_ID)
+    delayed(procedure)(this_subject_id) for this_subject_id in SUBJECT_IDS)
 
 # from the CDL results, save in a dataframe info about all atoms
-get_atom_df(results_dir=RESULTS_DIR, save=True)
+atom_df = get_atom_df(results_dir=RESULTS_DIR, save=True)

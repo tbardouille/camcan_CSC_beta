@@ -338,13 +338,14 @@ def get_atom_df(subject_ids=SUBJECT_IDS, results_dir=RESULTS_DIR, save=True):
     return df
 
 
-def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4):
+def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4, output_dir=RESULTS_DIR):
     """
 
     Parameters
     ----------
     atom_df : pandas DataFrame
-        each row is an atom
+        each row is an atom, at least the columns 'subject_id', 'atom_id', 'u_hat' 
+        and 'v_hat'    
 
     """
 
@@ -352,15 +353,101 @@ def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4):
     u_vector_list = np.asarray(atom_df['u_hat'].values)
     v_vector_list = np.asarray(atom_df['v_hat'].values)
 
+    u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
+
     v_coefs = []
     for v in v_vector_list:
         for v2 in v_vector_list:
             coef = np.max(ss.correlate(v, v2))
             v_coefs.append(coef)
-    v_coefs = np.asarray(v_coefs)
-    v_coefs = np.reshape(v_coefs, (10760, 10760))
+    v_coefs = np.reshape(np.asarray(v_coefs), (10760, 10760))
 
-    u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
+    group_num = 0
+
+    # Make atom groups array to keep track of the group that each atom belongs to
+    atom_groups = pd.DataFrame(
+        columns=['subject_id', 'atom_id', 'index', 'group_number'])
+
+    for ii, row in atom_df.iterrows():
+        unique = True
+        subject_id, atom_id = row.subject_id, row.atom_id
+        max_corr, max_group = 0, 0
+
+        # Loops through the existing groups and calculates the atom's average
+        # correlation to that group
+        for group in range(group_num + 1):
+            indx = atom_groups[atom_groups['group_number']
+                               == group]['index'].tolist()
+            # Find the u vector and correlation coefficient comparing the
+            # current atom to each atom in the group
+            avg_u = np.mean(abs(np.asarray([u_coefs[ii][jj] for jj in indx])))
+            avg_v = np.mean(abs(np.asarray([v_coefs[ii][jj] for jj in indx])))
+
+            # check if this group passes the thresholds
+            if (avg_u > u_thresh) & (avg_v > v_thresh):
+                unique = False
+                # If it does, also check if this is the highest cumulative
+                # correlation so far
+                if (avg_u + avg_v) > max_corr:
+                    max_corr = (avg_u + avg_v)
+                    max_group = group
+
+        if unique:
+            # If a similar group is not found, a new group is create and the
+            # current atom is added to that group
+            group_num += 1
+            group_dict = {'subject_id': subject_id, 'atom_id': atom_id,
+                          'index': ii, 'group_number': group_num}
+        else:
+            # If the atom was similar to at least one group, sorts it into the
+            # group that it had the highest cumulative correlation to
+            group_dict = {'subject_id': subject_id, 'atom_id': atom_id,
+                          'index': ii, 'group_number': max_group}
+
+        # Add to group dataframe and reset unique boolean
+        atom_groups = atom_groups.append(group_dict, ignore_index=True)
+
+    if output_dir is not None:
+        # Save atomGroups to dataframe
+        csv_dir = output_dir + \
+            'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atom_groups.csv'
+        atom_groups.to_csv(csv_dir)
+
+    return atom_groups
+
+
+def single_subject_exclusion(atom_df, u_thresh=0.4, v_thresh=0.4,
+                             n_group_thresh=14, output_dir=RESULTS_DIR):
+    """
+
+    """
+
+    def procedure(subject_id):
+
+        atom_groups = double_correlation_clustering(
+            atom_df=atom_df[atom_df['subject_id'] == subject_id],
+            u_thresh=u_thresh, v_thresh=v_thresh, output_dir=None)
+
+        new_row = {'subject_id': subject_id, 'exclude': False}
+
+        if len(np.unique(atom_groups.group_number)) < n_group_thresh:
+            new_row['exclude'] = True
+
+        return new_row
+
+    new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
+        delayed(this_subject_id)(procedure)
+        for this_subject_id in np.unique(atom_df.subject_id))
+
+    df = pd.DataFrame()
+    for this_new_row in new_rows:
+        df = df.append(this_new_row, ignore_index=True)
+
+    if output_dir is not None:
+        # Save atomGroups to dataframe
+        df.to_csv(output_dir / 'df_single_subject_exclusion.csv')
+
+    return df
 
 
 def correlation_clustering_atoms(atom_df, threshold=0.4,

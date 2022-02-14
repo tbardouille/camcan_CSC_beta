@@ -33,7 +33,8 @@ def procedure(subject_id):
     info.update(events=events_no_first_samp, event_id=None)
 
     allZ = make_epochs(
-        z_hat_, info, t_lim=(-1.7, 1.7), n_times_atom=CDL_PARAMS['n_times_atom'])
+        z_hat_, info, t_lim=(-1.7, 1.7),
+        n_times_atom=CDL_PARAMS['n_times_atom'])
 
     # save CDL results in pickle, as well as experiment parameters
     subject_res_dir = RESULTS_DIR / subject_id

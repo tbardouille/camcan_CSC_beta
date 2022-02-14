@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 
 
-TEAM = 'cedric'  # 'dal' | 'parietal' | 'cedric'
+TEAM = 'parietal'  # 'dal' | 'parietal' | 'cedric'
 N_JOBS = 6
 
 if TEAM == 'parietal':
@@ -35,9 +35,13 @@ elif TEAM == 'cedric':
     RESULTS_DIR = Path('./results_csc')
     PARTICIPANTS_FILE = Path("./participants.tsv")
 
-# list of all Can-CAN subject ids
-SUBJECT_IDS = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
-               (not f.is_file()) and (f.name[:6] == 'sub-CC')]
+try:
+    # list of all Can-CAN subject ids
+    SUBJECT_IDS = [f.name.split('-')[1] for f in BIDS_ROOT.iterdir() if
+                   (not f.is_file()) and (f.name[:6] == 'sub-CC')]
+except (FileNotFoundError):
+    print(f'No such file or directory: {BIDS_ROOT}')
+    SUBJECT_IDS = []
 
 
 def get_paths(subject_id, team=TEAM):

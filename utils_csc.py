@@ -1,6 +1,10 @@
 """
 Utils scripts for utils functions
 """
+# %%
+from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
+from sklearn.neighbors import NearestNeighbors
 from codecs import ignore_errors
 import scipy.signal as ss
 from sklearn import cluster
@@ -213,6 +217,28 @@ def get_subject_dipole(subject_id, cdl_model=None, info=None):
     return dip
 
 
+def flip_v(v):
+    """Ensure the temporal pattern v peak is positive for each atom.
+
+      If necessary, multiply both u and v by -1.
+
+    Parameter
+    ---------
+    v: array (n_atoms, n_times_atom)
+        temporal pattern
+
+    Return
+    ------
+    v: array (n_atoms, n_times_atom)
+    """
+
+    index_array = np.argmax(np.absolute(v), axis=1)
+    val_index = np.take_along_axis(v, np.expand_dims(
+        index_array, axis=-1), axis=-1).squeeze(axis=-1)
+    v[val_index < 0] *= -1
+    return v
+
+
 def get_atoms_info(subject_id, results_dir=RESULTS_DIR):
     """For a given subject, return a list of dictionary containing all atoms'
     informations (subject info, u and v vectors, dipole informations, changes
@@ -247,7 +273,7 @@ def get_atoms_info(subject_id, results_dir=RESULTS_DIR):
     dip = get_subject_dipole(subject_id, cdl_model, info=info)
 
     new_rows = []
-    for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
+    for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, flip_v(cdl_model.v_hat_))):
         gof, pos, ori = dip.gof[kk], dip.pos[kk], dip.ori[kk]
 
         # calculate the percent change in activation between different phases of movement
@@ -310,6 +336,31 @@ def get_atom_df(subject_ids=SUBJECT_IDS, results_dir=RESULTS_DIR, save=True):
         pickle.dump(df, open(results_dir / 'all_atoms_info.pkl', "wb"))
 
     return df
+
+
+def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4):
+    """
+
+    Parameters
+    ----------
+    atom_df : pandas DataFrame
+        each row is an atom
+
+    """
+
+    # Calculate the correlation coefficient between all atoms
+    u_vector_list = np.asarray(atom_df['u_hat'].values)
+    v_vector_list = np.asarray(atom_df['v_hat'].values)
+
+    v_coefs = []
+    for v in v_vector_list:
+        for v2 in v_vector_list:
+            coef = np.max(ss.correlate(v, v2))
+            v_coefs.append(coef)
+    v_coefs = np.asarray(v_coefs)
+    v_coefs = np.reshape(v_coefs, (10760, 10760))
+
+    u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
 
 
 def correlation_clustering_atoms(atom_df, threshold=0.4,
@@ -677,6 +728,48 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
 
     return atom_df
 
+
+# all_atoms_info = pd.read_csv('./all_atoms_info.csv')
+all_atoms_info = pickle.load(open('all_atoms_info.pkl', "rb"))
+
+# %%
+# subject_id = list(set(all_atoms_info['subject_id'].values))[0]
+subject_id = 'CC110037'
+data_cols = ['u_hat', 'v_hat']
+sub_df = all_atoms_info[all_atoms_info['subject_id'] == subject_id]
+n_sensors = len(all_atoms_info['u_hat'].values[0])
+n_times_atom = len(all_atoms_info['v_hat'].values[0])
+X = pd.DataFrame()
+X[[f'u_{i}' for i in range(n_sensors)]] = pd.DataFrame(
+    sub_df.u_hat.tolist(), index=sub_df.index)
+# X[[f'v_{i}' for i in range(n_times_atom)]] = pd.DataFrame(
+#     sub_df.v_hat.tolist(), index=sub_df.index)
+
+# %%
+
+
+neigh = NearestNeighbors(n_neighbors=2, metric='correlation')
+nbrs = neigh.fit(X)
+distances, indices = nbrs.kneighbors(X)
+distances = np.sort(distances, axis=0)
+distances = distances[:, 1]
+plt.plot(distances)
+p = 90
+q = int(X.shape[0] * p / 100)
+plt.vlines(q, 0, 1, linestyles='--', label=f'{p}%')
+plt.legend()
+plt.show()
+
+eps = round(distances[q], 2)
+print(
+    f"epsilon choice so that 90% of individuals have their nearest neightbour in less than epsilon: {eps}")
+
+# %%
+
+y_pred = DBSCAN(eps=eps, min_samples=2, metric='correlation').fit_predict(X)
+print(y_pred)
+
+# %%
 
 if __name__ == '__main__':
     atomData = pd.read_csv(RESULTS_DIR / 'atomData.csv')

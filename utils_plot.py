@@ -5,9 +5,11 @@
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 
 import mne
 
+from config import RESULTS_DIR
 # from dripp.trunc_norm_kernel.model import TruncNormKernel
 
 
@@ -176,6 +178,85 @@ import mne
 #     return figs
 
 # # %%
+
+def plot_atoms_single_sub(df_atoms, subject_id, sfreq=150., plot_psd=False, plot_dipole=False):
+    """Plot the atoms of a single subject.
+
+    Parameters
+    ----------
+
+    df_atoms : pandas.DataFrame
+        each row is an atom, has minimum columns 'subject_id', 'atom_id', 'u_hat', 'v_hat'
+
+    subject_id : str
+
+
+    Returns
+    -------
+
+
+    """
+
+    df = df_atoms[df_atoms['subject_id'] == subject_id]
+    n_atoms = df['atom_id'].nunique()
+
+    # get info
+    file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
+    _, info, _, _ = pickle.load(open(file_name, "rb"))
+    meg_indices = mne.pick_types(info, meg='grad')
+    info = mne.pick_info(info, meg_indices)
+
+    # shape of the final figure
+    fontsize = 12
+    n_columns = min(5, n_atoms)
+    split = int(np.ceil(n_atoms / n_columns))
+    n_plots = 2 + plot_psd + plot_dipole
+    figsize = (4 * n_columns, 3 * n_plots * split)
+    fig, axes = plt.subplots(n_plots * split, n_columns, figsize=figsize)
+    axes = np.atleast_2d(axes)
+
+    for ii, row in df.iterrows():
+        kk = row.atom_id
+        # Select the axes to display the current atom
+        i_row, i_col = ii // n_columns, ii % n_columns
+        it_axes = iter(axes[i_row * n_plots:(i_row + 1) * n_plots, i_col])
+        ax = next(it_axes)
+        ax.set_title('Atom % d' % kk, fontsize=fontsize, pad=0)
+        # Plot the spatial map of the atom using mne topomap
+        mne.viz.plot_topomap(data=row.u_hat, pos=info, axes=ax, show=False)
+        if i_col == 0:
+            ax.set_ylabel('Spatial', labelpad=30, fontsize=fontsize)
+
+        # Plot the temporal pattern of the atom
+        v_hat = row.v_hat
+        ax = next(it_axes)
+        ax.plot(np.arange(v_hat.shape[0]) / sfreq, v_hat)
+        atom_duration = v_hat.shape[-1] / sfreq
+        ax.set_xlim(0, atom_duration)
+        if i_col == 0:
+            temporal_ax = ax
+            ax.set_ylabel('Temporal', fontsize=fontsize)
+
+        if i_col > 0:
+            ax.get_yaxis().set_visible(False)
+            temporal_ax.get_shared_y_axes().join(temporal_ax, ax)
+            ax.autoscale()
+
+        if plot_psd:
+            ax = next(it_axes)
+            psd = np.abs(np.fft.rfft(v_hat, n=256)) ** 2
+            frequencies = np.linspace(0, sfreq / 2.0, len(psd))
+            ax.semilogy(frequencies, psd, label="PSD", color="k")
+            ax.set_xlim(0, 40)  # crop x axis
+            ax.set_xlabel("Frequencies (Hz)")
+            ax.grid(True)
+            if i_col == 0:
+                ax.set_ylabel("Power Spectral Density", labelpad=8)
+
+        if plot_dipole:
+            # XXX
+            pass
+        
 
 
 def plot_mean_atom(df, info, sfreq=150., plot_psd=False, plot_acti_histo=False, plot_dipole=False):

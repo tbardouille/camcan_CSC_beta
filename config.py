@@ -63,6 +63,8 @@ def get_paths(subject_id, team=TEAM):
         bemFif = BEM_DIR / subject_id / \
             'bem' / (subject_id + '-meg-bem.fif')
         transFif = TRANS_DIR / ('sub-' + subject_id + '-trans.fif')
+        if not transFif.exists():
+            transFif = Path(str(transFif).replace('trans/', 'trans-halifax/'))
         # XXX
         EPOCH_DIR = ''
         fifFile = ''

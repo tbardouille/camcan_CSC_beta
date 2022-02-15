@@ -3,7 +3,6 @@ from pathlib import Path
 
 
 TEAM = 'parietal'  # 'dal' | 'parietal' | 'cedric'
-N_JOBS = 6
 
 if TEAM == 'parietal':
     # path to CSC results
@@ -15,6 +14,7 @@ if TEAM == 'parietal':
     CT_SPARSE_FILE = DATA_DIR / "camcan-mne/Cam-CAN_ct_sparse.fif"
     PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
     HOME_DIR = Path('.')
+    N_JOBS = 20
 
 elif TEAM == 'dal':
     # path to CSC results
@@ -29,11 +29,13 @@ elif TEAM == 'dal':
         "/home/timb/camcan/camcanMEGcalibrationFiles/ct_sparse.fif")
     PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
     HOME_DIR = Path("/media/NAS/lpower/CSC/")
+    N_JOBS = 6
 
 elif TEAM == 'cedric':
     # path to CSC results
     RESULTS_DIR = Path('./results_csc')
     PARTICIPANTS_FILE = Path("./participants.tsv")
+    N_JOBS = 6
 
 try:
     # list of all Can-CAN subject ids

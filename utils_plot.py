@@ -9,7 +9,8 @@ import pickle
 
 import mne
 
-from config import RESULTS_DIR
+from config import RESULTS_DIR, get_paths
+from utils_csc import get_subject_dipole
 # from dripp.trunc_norm_kernel.model import TruncNormKernel
 
 
@@ -179,13 +180,13 @@ from config import RESULTS_DIR
 
 # # %%
 
-def plot_atoms_single_sub(df_atoms, subject_id, sfreq=150., plot_psd=False, plot_dipole=False):
+def plot_atoms_single_sub(atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False):
     """Plot the atoms of a single subject.
 
     Parameters
     ----------
 
-    df_atoms : pandas.DataFrame
+    atom_df : pandas.DataFrame
         each row is an atom, has minimum columns 'subject_id', 'atom_id', 'u_hat', 'v_hat'
 
     subject_id : str
@@ -197,14 +198,18 @@ def plot_atoms_single_sub(df_atoms, subject_id, sfreq=150., plot_psd=False, plot
 
     """
 
-    df = df_atoms[df_atoms['subject_id'] == subject_id]
+    df = atom_df[atom_df['subject_id'] == subject_id]
     n_atoms = df['atom_id'].nunique()
 
     # get info
     file_name = RESULTS_DIR / subject_id / 'CSCraw_0.5s_20atoms.pkl'
-    _, info, _, _ = pickle.load(open(file_name, "rb"))
+    cdl_model, info, _, _ = pickle.load(open(file_name, "rb"))
     meg_indices = mne.pick_types(info, meg='grad')
     info = mne.pick_info(info, meg_indices)
+
+    # get dipole
+    dip = get_subject_dipole(subject_id, cdl_model=cdl_model, info=info)
+    epochFif, transFif, bemFif = get_paths(subject_id)
 
     # shape of the final figure
     fontsize = 12
@@ -254,9 +259,15 @@ def plot_atoms_single_sub(df_atoms, subject_id, sfreq=150., plot_psd=False, plot
                 ax.set_ylabel("Power Spectral Density", labelpad=8)
 
         if plot_dipole:
-            # XXX
+            ax = next(it_axes)
+            dip.plot_locations(str(transFif), '01', subjects_dir,
+                               idx=kk, ax=ax, show_all=False)
             pass
-        
+
+    fig.tight_layout()
+    plt.show()
+
+    return fig
 
 
 def plot_mean_atom(df, info, sfreq=150., plot_psd=False, plot_acti_histo=False, plot_dipole=False):

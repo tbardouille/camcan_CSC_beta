@@ -350,17 +350,22 @@ def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4, output_di
     """
 
     # Calculate the correlation coefficient between all atoms
-    u_vector_list = np.asarray(atom_df['u_hat'].values)
-    v_vector_list = np.asarray(atom_df['v_hat'].values)
+    # u_vector_list = np.asarray(atom_df['u_hat'].values)
+    # u_coefs = np.corrcoef(u_vector_list, u_vector_list, rowvar=False)[0:10760][0:10760]
+    u_coefs = np.corrcoef(np.stack(atom_df['u_hat']))
 
-    u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
+    # v_vector_list = np.stack(atom_df['v_hat'])
+    # v_coefs = []
+    # for v in v_vector_list:
+    #     for v2 in v_vector_list:
+    #         coef = np.max(ss.correlate(v, v2))
+    #         v_coefs.append(coef)
+    # v_coefs = np.reshape(np.asarray(v_coefs), (10760, 10760))
 
-    v_coefs = []
-    for v in v_vector_list:
-        for v2 in v_vector_list:
-            coef = np.max(ss.correlate(v, v2))
-            v_coefs.append(coef)
-    v_coefs = np.reshape(np.asarray(v_coefs), (10760, 10760))
+    v_list = np.stack(atom_df['v_hat'])
+    v_coefs = np.reshape([np.max(ss.correlate(v1, v2))
+                          for v1 in v_list for v2 in v_list],
+                         (v_list.shape[0], v_list.shape[0]))
 
     group_num = 0
 
@@ -430,13 +435,13 @@ def single_subject_exclusion(atom_df, u_thresh=0.4, v_thresh=0.4,
 
         new_row = {'subject_id': subject_id, 'exclude': False}
 
-        if len(np.unique(atom_groups.group_number)) < n_group_thresh:
+        if atom_groups['group_number'].nunique() < n_group_thresh:
             new_row['exclude'] = True
 
         return new_row
 
     new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
-        delayed(this_subject_id)(procedure)
+        delayed(procedure)(this_subject_id)
         for this_subject_id in np.unique(atom_df.subject_id))
 
     df = pd.DataFrame()
@@ -639,6 +644,25 @@ def culstering_cah_kmeans(df, data_columns='all', n_clusters=6):
     df['labels_kmeans'] = kmeans.labels_
 
     return df
+
+
+def compute_distance_matrix(atom_df):
+    """Compute the distance matrix, where
+
+    ..maths:
+        M[i,j] = 1 - \frac{\sqrt{corr_u[i,j]^2 + corr_v[i,j]^2}}{\sqrt{2}}
+    """
+
+    corr_u = np.corrcoef(np.stack(atom_df['u_hat']))
+
+    v_list = np.stack(atom_df['v_hat'])
+    corr_v = np.reshape([np.max(ss.correlate(v1, v2))
+                         for v1 in v_list for v2 in v_list],
+                        (v_list.shape[0], v_list.shape[0]))
+
+    D = 1 - np.sqrt(corr_u**2 + corr_v**2) / np.sqrt(2)
+
+    return D
 
 
 def reconstruct_class_signal(df, results_dir):

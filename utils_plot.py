@@ -207,9 +207,10 @@ def plot_atoms_single_sub(atom_df, subject_id, sfreq=150., plot_psd=False, plot_
     meg_indices = mne.pick_types(info, meg='grad')
     info = mne.pick_info(info, meg_indices)
 
-    # get dipole
-    dip = get_subject_dipole(subject_id, cdl_model=cdl_model, info=info)
-    epochFif, transFif, bemFif = get_paths(subject_id)
+    if plot_dipole:
+        # get dipole
+        dip = get_subject_dipole(subject_id, cdl_model=cdl_model, info=info)
+        epochFif, transFif, bemFif = get_paths(subject_id)
 
     # shape of the final figure
     fontsize = 12

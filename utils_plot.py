@@ -180,7 +180,7 @@ from utils_csc import get_subject_dipole
 
 # # %%
 
-def plot_atoms_single_sub(atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False):
+def plot_atoms_single_sub(atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False, save_dir=None):
     """Plot the atoms of a single subject.
 
     Parameters
@@ -198,7 +198,7 @@ def plot_atoms_single_sub(atom_df, subject_id, sfreq=150., plot_psd=False, plot_
 
     """
 
-    df = atom_df[atom_df['subject_id'] == subject_id]
+    df = atom_df[atom_df['subject_id'] == subject_id].reset_index()
     n_atoms = df['atom_id'].nunique()
 
     # get info
@@ -266,6 +266,8 @@ def plot_atoms_single_sub(atom_df, subject_id, sfreq=150., plot_psd=False, plot_
             pass
 
     fig.tight_layout()
+    if save_dir is not None:
+        plt.savefig(save_dir + f'/atoms_subject_{subject_id}.jpg')
     plt.show()
 
     return fig

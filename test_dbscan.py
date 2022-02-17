@@ -15,6 +15,8 @@ import pickle
 import mne
 print(mne.__version__)
 
+SAVE = True
+
 
 # dip = get_subject_dipole(subject_id='CC110606')
 # print(dip.pos)
@@ -43,6 +45,17 @@ def get_eps_rot(atom_df, p=90):
     return eps
 
 
+def compute_n_groups(y_pred):
+    """
+
+    """
+    # all outliers points are labelled with "-1"
+    n_noise_point = len(y_pred[y_pred == -1])
+    # make sure we count outliers separetly and not twice
+    n_groups = len(np.unique(y_pred)) + n_noise_point - (n_noise_point > 0)
+    return n_groups
+
+
 def run_dbscan_heatmap(atom_df, exclude_subs=None):
     """Compute DBscan on atom_df (eventually after removing subjects in
     exclude_subs) for different hyper-parameters, and plot the heatmap of the
@@ -62,7 +75,7 @@ def run_dbscan_heatmap(atom_df, exclude_subs=None):
         y_pred = DBSCAN(eps=eps, min_samples=min_samples,
                         metric='precomputed').fit_predict(D)
         row = {'eps': eps, 'min_samples': min_samples,
-               'n_groups': len(np.unique(y_pred))}
+               'n_groups': compute_n_groups(y_pred)}
 
         return row
 
@@ -83,6 +96,12 @@ def run_dbscan_heatmap(atom_df, exclude_subs=None):
     ax.set_title(title)
     ax.set_ylabel(r'$\varepsilon$')
     ax.set_xlabel(r"min samples")
+    title = 'results_dbscan/heatmap'
+    if exclude_subs is not None:
+        title += '_with_exclusion'
+    title += '.jpg'
+    if SAVE:
+        plt.savefig(title)
     plt.show()
 
     return df_dbscan
@@ -102,7 +121,7 @@ def run_dbscan_group_analysis(atom_df, eps=0.2, min_samples=2, plot=False):
                         metric='precomputed').fit_predict(D)
         row = {'subject_id': subject_id, 'eps': eps,
                'min_samples': min_samples,
-               'n_groups': len(np.unique(y_pred))}
+               'n_groups': compute_n_groups(y_pred)}
 
         return row
 
@@ -123,6 +142,8 @@ def run_dbscan_group_analysis(atom_df, eps=0.2, min_samples=2, plot=False):
         df_group_analysis.plot(x='n_groups', y='nunique_subject_id')
         plt.title(f'Number of groups obtain on single subject, \
             with eps = {eps} and min_samples = {min_samples}')
+        plt.savefig(
+            f'results_dbscan/group_analysis_eps_{eps}_min_samples_{min_samples}.jpg')
         plt.show()
 
     return df_dbscan, df_group_analysis
@@ -151,10 +172,12 @@ list_min_samples = [1, 2, 3]
 fig, axes = plt.subplots(len(list_min_samples), len(list_eps))
 axes = np.atleast_2d(axes)
 
+df_hp_analysis = pd.DataFrame()
 for ii, min_sample in enumerate(list_min_samples):
     for jj, eps in enumerate(list_eps):
         df_dbscan, df_group_analysis = run_dbscan_group_analysis(
             atom_df, eps=eps, min_samples=min_sample)
+        df_hp_analysis = df_hp_analysis.append(df_dbscan, ignore_index=True)
         ax = axes[ii, jj]
         if jj == 0:
             ax.set_ylabel(f'min_samples = {min_sample}')
@@ -164,12 +187,17 @@ for ii, min_sample in enumerate(list_min_samples):
             x='n_groups', y='nunique_subject_id', ax=ax, legend=False)
 
 fig.tight_layout()
+if SAVE:
+    plt.savefig('results_dbscan/hp_group_analysis.jpg')
 plt.show()
+
+df_hp_analysis.to_csv('results_dbscan/df_hp_analysis.csv')
 # %%
 eps = 0.1
 min_samples = 1
 df_dbscan, df_group_analysis = run_dbscan_group_analysis(
-    atom_df, eps=eps, min_samples=min_samples, plot=True)
+    atom_df, eps=eps, min_samples=min_samples, plot=SAVE)
+df_dbscan.to_csv('results_dbscan/df_dbscan.csv')
 # %%
 min_n_groups = 14
 exclude_subs = df_dbscan[df_dbscan['n_groups']
@@ -177,10 +205,20 @@ exclude_subs = df_dbscan[df_dbscan['n_groups']
 print(f'exclusion list: {exclude_subs}')
 subject_id = exclude_subs[0]
 print(f'Plot atoms for subject {subject_id}')
-fig = plot_atoms_single_sub(
-    atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False)
+plot_atoms_single_sub(
+    atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False, save_dir='results_dbscan')
+
 # %%
 
 _ = run_dbscan_heatmap(atom_df, exclude_subs=exclude_subs)
 
+# %%
+eps = 0.1
+min_samples = 2
+subject_id = 'CC723395'
+D = compute_distance_matrix(
+    atom_df[atom_df['subject_id'] == subject_id])
+
+y_pred = DBSCAN(eps=eps, min_samples=min_samples,
+                metric='precomputed').fit_predict(D)
 # %%

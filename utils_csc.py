@@ -852,9 +852,7 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
     return atom_df
 
 
-
 # %%
-
 
 if __name__ == '__main__':
     atomData = pd.read_csv(RESULTS_DIR / 'atomData.csv')

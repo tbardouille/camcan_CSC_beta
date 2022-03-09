@@ -1,11 +1,10 @@
 # %%
-
-
-from utils_plot import plot_atoms_single_sub
 from utils_csc import compute_distance_matrix
-from config import N_JOBS
+from utils_plot import plot_atoms_single_sub
 import numpy as np
 import pandas as pd
+import re
+from config import N_JOBS
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,6 +13,7 @@ import pickle
 
 import mne
 print(mne.__version__)
+
 
 SAVE = True
 
@@ -107,7 +107,7 @@ def run_dbscan_heatmap(atom_df, exclude_subs=None):
     return df_dbscan
 
 
-def run_dbscan_group_analysis(atom_df, eps=0.2, min_samples=2, plot=False):
+def run_dbscan_group_analysis(atom_df, eps=0.1, min_samples=1, plot=False):
     """Compute DBscan on each subjects in atom_df.
 
     """
@@ -140,8 +140,8 @@ def run_dbscan_group_analysis(atom_df, eps=0.2, min_samples=2, plot=False):
 
     if plot:
         df_group_analysis.plot(x='n_groups', y='nunique_subject_id')
-        plt.title(f'Number of groups obtain on single subject, \
-            with eps = {eps} and min_samples = {min_samples}')
+        plt.title(
+            f'Number of groups obtain on single subject, eps = {eps} and min_samples = {min_samples}')
         plt.savefig(
             f'results_dbscan/group_analysis_eps_{eps}_min_samples_{min_samples}.jpg')
         plt.show()
@@ -149,6 +149,7 @@ def run_dbscan_group_analysis(atom_df, eps=0.2, min_samples=2, plot=False):
     return df_dbscan, df_group_analysis
 
 
+# %%
 # exclusion list in Lindsey's
 exclude_subs_dal = ['CC420061', 'CC121397', 'CC420396', 'CC420348', 'CC320850',
                     'CC410325', 'CC121428', 'CC110182', 'CC420167', 'CC420261',
@@ -156,57 +157,126 @@ exclude_subs_dal = ['CC420061', 'CC121397', 'CC420396', 'CC420348', 'CC320850',
                     'CC510043', 'CC621642', 'CC521040', 'CC610052', 'CC520517',
                     'CC610469', 'CC720497', 'CC610292', 'CC620129', 'CC620490']
 
-atom_df = pickle.load(open('all_atoms_info.pkl', "rb"))
+# atom_df = pickle.load(open('all_atoms_info.pkl', "rb"))
+atom_df = pd.read_csv('atomData_v2.csv')
+pattern = re.compile("[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?")
+if type(atom_df['u_hat'][0]) == str:
+    atom_df['u_hat'] = atom_df['u_hat'].apply(
+        lambda x: np.array(pattern.findall(x)).astype(float))
+    atom_df['v_hat'] = atom_df['v_hat'].apply(
+        lambda x: np.array(pattern.findall(x)).astype(float))
+print(atom_df)
 
 # %%
-get_eps_rot(atom_df, p=90)
-_ = run_dbscan_heatmap(atom_df, exclude_subs=None)
+# get_eps_rot(atom_df, p=90)
+# _ = run_dbscan_heatmap(atom_df, exclude_subs=None)
 
 # %% For a list of hyper-parameters, compute the DBscan for each subject
 # separatly and plot the repartition of subjects in function of the number of
 # unique groups they obtained with DBscan
 
-list_eps = [0.1, 0.2, 0.3, 0.4]
-list_min_samples = [1, 2, 3]
-
-fig, axes = plt.subplots(len(list_min_samples), len(list_eps))
-axes = np.atleast_2d(axes)
+list_eps = np.linspace(0.05, 0.8, 16)
+list_min_samples = [1]
 
 df_hp_analysis = pd.DataFrame()
+
+
 for ii, min_sample in enumerate(list_min_samples):
     for jj, eps in enumerate(list_eps):
         df_dbscan, df_group_analysis = run_dbscan_group_analysis(
             atom_df, eps=eps, min_samples=min_sample)
         df_hp_analysis = df_hp_analysis.append(df_dbscan, ignore_index=True)
-        ax = axes[ii, jj]
-        if jj == 0:
-            ax.set_ylabel(f'min_samples = {min_sample}')
-        if ii == 0:
-            ax.set_title(f'eps = {eps}')
-        df_group_analysis.plot(
-            x='n_groups', y='nunique_subject_id', ax=ax, legend=False)
+
+if SAVE:
+    df_hp_analysis.to_csv('results_dbscan/df_hp_analysis.csv', index=False)
+# %%
+
+df_hp_analysis = pd.read_csv('results_dbscan/df_hp_analysis.csv')
+
+list_eps = np.linspace(0.05, 0.45, 9)
+min_samples = 1
+
+n_col = 3
+fig, axes = plt.subplots(3, n_col)
+axes = np.atleast_2d(axes)
+
+for ii, eps in enumerate(list_eps):
+    df_dbscan = df_hp_analysis[(df_hp_analysis['eps'] == eps) & (
+        df_hp_analysis['min_samples'] == min_samples)]
+    df_group_analysis = df_dbscan.groupby('n_groups')\
+        .agg({'subject_id': 'count'})\
+        .rename(columns={'subject_id': 'nunique_subject_id'})\
+        .reset_index()
+    ax = axes[ii//n_col, ii % n_col]
+    ax.hist(df_group_analysis.n_groups,
+            weights=df_group_analysis.nunique_subject_id,
+            bins=np.arange(1, 22) - 0.5, range=(1, 21),
+            label="nunique_subject_id")
+    ax.set_title(f"$\epsilon$ = {eps:.2}")
+    # ax.set_xticks(range(1, 21))
+    ax.set_xlim([0.5, 20.5])
 
 fig.tight_layout()
 if SAVE:
     plt.savefig('results_dbscan/hp_group_analysis.jpg')
+    plt.savefig('results_dbscan/hp_group_analysis.pdf')
 plt.show()
 
-df_hp_analysis.to_csv('results_dbscan/df_hp_analysis.csv')
+
+# plot single subject analysis
+
 # %%
 eps = 0.1
 min_samples = 1
-df_dbscan, df_group_analysis = run_dbscan_group_analysis(
-    atom_df, eps=eps, min_samples=min_samples, plot=SAVE)
-df_dbscan.to_csv('results_dbscan/df_dbscan.csv')
-# %%
 min_n_groups = 14
+df_dbscan = df_hp_analysis[(df_hp_analysis['eps'] == eps) & (
+    df_hp_analysis['min_samples'] == min_samples)]
+df_group_analysis = df_dbscan.groupby('n_groups')\
+    .agg({'subject_id': 'count'})\
+    .rename(columns={'subject_id': 'nunique_subject_id'})\
+    .reset_index()
+
+plt.hist(df_group_analysis.n_groups,
+         weights=df_group_analysis.nunique_subject_id,
+         bins=np.arange(1, 22) - 0.5, range=(1, 21),
+         label="nunique_subject_id")
+plt.vlines(x=min_n_groups, ymin=0, ymax=df_group_analysis['nunique_subject_id'].max(),
+           linestyles='--')
+plt.title(f"$\epsilon$ = {eps:.2}")
+plt.xticks(range(1, 21))
+plt.xlim([0.5, 20.5])
+plt.savefig('results_dbscan/single_sub_exclude_hist.pdf')
+plt.savefig('results_dbscan/single_sub_exclude_hist.png')
+plt.show()
+
 exclude_subs = df_dbscan[df_dbscan['n_groups']
                          < min_n_groups]['subject_id'].values
-print(f'exclusion list: {exclude_subs}')
-subject_id = exclude_subs[0]
-print(f'Plot atoms for subject {subject_id}')
-plot_atoms_single_sub(
-    atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False, save_dir='results_dbscan')
+print(
+    f"Excluding subjects with strictly less than {min_n_groups} clusters results in the exclusion of {len(exclude_subs)} subjects: \n{exclude_subs}")
+
+both_exclude = [
+    subject_id for subject_id in exclude_subs if subject_id in exclude_subs_dal]
+print(
+    f'including {len(both_exclude)} that were previoulsy excluded: \n{both_exclude}')
+
+excluded_subjects = atom_df[atom_df['subject_id'].isin(
+    exclude_subs)].reset_index()
+excluded_subjects = excluded_subjects[['subject_id', 'age', 'sex']]\
+    .drop_duplicates()\
+    .sort_values('subject_id')\
+    .reset_index(drop=True)
+print(excluded_subjects.to_latex())
+
+# %%
+for subject_id in df_dbscan[df_dbscan['n_groups']
+                            == 13]['subject_id'].values:
+    try:
+        plot_atoms_single_sub(
+            atom_df, subject_id, sfreq=150., plot_psd=False, plot_dipole=False, save_dir='results_dbscan')
+        print(f'Plot atoms for subject {subject_id}')
+    except:
+        pass
+
 
 # %%
 
@@ -221,4 +291,25 @@ D = compute_distance_matrix(
 
 y_pred = DBSCAN(eps=eps, min_samples=min_samples,
                 metric='precomputed').fit_predict(D)
+print(y_pred)
+# %%
+# Final Clustering
+
+eps = 0.1
+min_samples = 2
+atom_df_exclude = atom_df[~atom_df['subject_id'].isin(
+    exclude_subs)].reset_index()
+D = compute_distance_matrix(atom_df_exclude)
+
+y_pred = DBSCAN(eps=eps, min_samples=min_samples,
+                metric='precomputed').fit_predict(D)
+print(y_pred)
+print(compute_n_groups(y_pred))
+
+atom_df_exclude['final_label'] = y_pred
+clustering_analysis = atom_df_exclude.groupby('final_label')\
+    .agg({'subject_id': 'count'})\
+    .rename(columns={'subject_id': 'nunique_subject_id'})\
+    .reset_index()
+
 # %%

@@ -4,7 +4,7 @@ import pickle
 
 import mne
 
-from config import RESULTS_DIR, CDL_PARAMS
+from config import RESULTS_DIR, CDL_PARAMS, get_cdl_pickle_name
 from utils_csc import double_correlation_clustering, get_df_mean, reconstruct_class_signal, run_csc
 from utils_plot import plot_mean_atom
 # %%
@@ -45,14 +45,14 @@ fig = plot_mean_atom(df_mean, info, plot_psd=True)
 
 # %%
 
-cdl_params = CDL_PARAMS
+cdl_params = CDL_PARAMS.copy()
 cdl_params.update(n_atoms=1, n_splits=1)
 col_label = 'group_number'
 
 def procedure(label):
     # Reconstruct signal for a given class
     X, n_times_atom = reconstruct_class_signal(
-        df=df[df[col_label] == label], results_dir=results_dir)
+        df=df[df[col_label] == label], results_dir=RESULTS_DIR)
     cdl_params['n_times_atom'] = n_times_atom
     cdl_model, z_hat = run_csc(X, **cdl_params)
     # append dataframe
@@ -64,4 +64,18 @@ def procedure(label):
 
     return new_row
 
-new_row = procedure(label=1)
+new_row = procedure(label=6)
+
+subject_id = df['subject_id'][0]  # 'CC110606'
+file_name = RESULTS_DIR / subject_id / get_cdl_pickle_name()
+_, info, _, _ = pickle.load(open(file_name, "rb"))
+evoked = mne.EvokedArray(new_row['u_hat'], info)
+
+#Compute noise covariance
+empty_room = mne.read_epochs(emptyroomFif)
+noise_cov = mne.compute_covariance(empty_room, tmin=0, tmax=None)
+     
+#Fit dipoles
+dip = mne.fit_dipole(evoked, noise_cov, bemFif, transFif,  verbose=False)[0]
+dip.plot_locations(transFif,'fsaverage',subjectsDir)
+# %%

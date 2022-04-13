@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 
 
-TEAM = 'parietal'  # 'dal' | 'parietal' | 'cedric'
+TEAM = 'cedric'  # 'dal' | 'parietal' | 'cedric'
 N_JOBS = 6
 
 if TEAM == 'parietal':
@@ -34,6 +34,11 @@ elif TEAM == 'cedric':
     # path to CSC results
     RESULTS_DIR = Path('./results_csc')
     PARTICIPANTS_FILE = Path("./participants.tsv")
+    BIDS_ROOT = Path()
+    SSS_CAL_FILE = Path()
+    CT_SPARSE_FILE = Path()
+
+
 
 try:
     # list of all Can-CAN subject ids
@@ -67,6 +72,12 @@ def get_paths(subject_id, team=TEAM):
         EPOCH_DIR = ''
         fifFile = ''
         epochFif = EPOCH_DIR + subject_id + fifFile
+
+    elif team == 'cedric':
+        transFif = Path('sub-' + subject_id + '-trans.fif')
+        bemFif = Path(subject_id + '-meg-bem.fif')
+        epochFif = ''  
+
 
     return epochFif, transFif, bemFif
 

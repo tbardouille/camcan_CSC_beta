@@ -2,6 +2,7 @@
 Utils scripts for utils functions
 """
 # %%
+# %%
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors
@@ -190,12 +191,14 @@ def get_subject_dipole(subject_id, cdl_model=None, info=None):
             return
         # load CSC results
         cdl_model, info, _, _ = pickle.load(open(file_name, "rb"))
-    # compute noise covariance
-    cov = mne.make_ad_hoc_cov(info)
+    # # compute noise covariance
+    # cov = mne.make_ad_hoc_cov(info)
     # select only grad channels
     meg_indices = mne.pick_types(info, meg='grad')
     info = mne.pick_info(info, meg_indices)
     evoked = mne.EvokedArray(cdl_model.u_hat_.T, info)
+    # compute noise covariance
+    cov = mne.make_ad_hoc_cov(info)
     # compute dipole fit
     dip = mne.fit_dipole(evoked, cov, str(bemFif), str(transFif), n_jobs=6,
                          verbose=False)[0]
@@ -418,10 +421,12 @@ def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4, output_di
             'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atom_groups.csv'
         atom_groups.to_csv(csv_dir)
 
-    return atom_groups
+    group_summary = None  # XXX
+
+    return atom_groups, group_summary
 
 
-def single_subject_exclusion(atom_df, u_thresh=0.4, v_thresh=0.4,
+def single_subject_exclusion(atom_df, u_thresh=0.8, v_thresh=0.8,
                              n_group_thresh=14, output_dir=RESULTS_DIR):
     """
 
@@ -660,7 +665,10 @@ def compute_distance_matrix(atom_df):
                          for v1 in v_list for v2 in v_list],
                         (v_list.shape[0], v_list.shape[0]))
 
-    D = 1 - np.sqrt(corr_u**2 + corr_v**2) / np.sqrt(2)
+    D = (1 - np.sqrt(corr_u**2 + corr_v**2) / np.sqrt(2)).clip(min=0)
+    np.fill_diagonal(D, 0)  # enforce the 0 in the diagonal
+    # ensure that D is symetric while keeping enough precision
+    D = np.round(D, 6)
 
     return D
 
@@ -840,45 +848,33 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
     return atom_df
 
 
-# all_atoms_info = pd.read_csv('./all_atoms_info.csv')
-all_atoms_info = pickle.load(open('all_atoms_info.pkl', "rb"))
-
-# %%
-# subject_id = list(set(all_atoms_info['subject_id'].values))[0]
-subject_id = 'CC110037'
-data_cols = ['u_hat', 'v_hat']
-sub_df = all_atoms_info[all_atoms_info['subject_id'] == subject_id]
-n_sensors = len(all_atoms_info['u_hat'].values[0])
-n_times_atom = len(all_atoms_info['v_hat'].values[0])
-X = pd.DataFrame()
-X[[f'u_{i}' for i in range(n_sensors)]] = pd.DataFrame(
-    sub_df.u_hat.tolist(), index=sub_df.index)
-# X[[f'v_{i}' for i in range(n_times_atom)]] = pd.DataFrame(
-#     sub_df.v_hat.tolist(), index=sub_df.index)
-
-# %%
+# # all_atoms_info = pd.read_csv('./all_atoms_info.csv')
+# all_atoms_info = pickle.load(open('all_atoms_info.pkl', "rb"))
+# subject_id = 'CC620264'
+# dip = get_subject_dipole(subject_id)  # version mne qui marche 0.23.0
+# # %%
 
 
-neigh = NearestNeighbors(n_neighbors=2, metric='correlation')
-nbrs = neigh.fit(X)
-distances, indices = nbrs.kneighbors(X)
-distances = np.sort(distances, axis=0)
-distances = distances[:, 1]
-plt.plot(distances)
-p = 90
-q = int(X.shape[0] * p / 100)
-plt.vlines(q, 0, 1, linestyles='--', label=f'{p}%')
-plt.legend()
-plt.show()
+# neigh = NearestNeighbors(n_neighbors=2, metric='correlation')
+# nbrs = neigh.fit(X)
+# distances, indices = nbrs.kneighbors(X)
+# distances = np.sort(distances, axis=0)
+# distances = distances[:, 1]
+# plt.plot(distances)
+# p = 90
+# q = int(X.shape[0] * p / 100)
+# plt.vlines(q, 0, 1, linestyles='--', label=f'{p}%')
+# plt.legend()
+# plt.show()
 
-eps = round(distances[q], 2)
-print(
-    f"epsilon choice so that 90% of individuals have their nearest neightbour in less than epsilon: {eps}")
+# eps = round(distances[q], 2)
+# print(
+#     f"epsilon choice so that 90% of individuals have their nearest neightbour in less than epsilon: {eps}")
 
-# %%
+# # %%
 
-y_pred = DBSCAN(eps=eps, min_samples=2, metric='correlation').fit_predict(X)
-print(y_pred)
+# y_pred = DBSCAN(eps=eps, min_samples=2, metric='correlation').fit_predict(X)
+# print(y_pred)
 
 # %%
 

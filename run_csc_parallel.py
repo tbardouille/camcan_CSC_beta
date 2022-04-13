@@ -16,16 +16,25 @@ from utils_csc import get_raw, run_csc, get_atom_df
 
 mem = Memory('.')
 
-
-def procedure(subject_id):
+def get_csc_results(subject_id, cdl_params):
     """
-
+    
     """
     # get preprocessed raw and events
     raw, events = get_raw(subject_id)
     # run multivariate CSC
     cdl_model, z_hat_ = mem.cache(run_csc)(
         X=raw.get_data(picks=['meg']), **CDL_PARAMS)
+
+    return  raw, events, cdl_model, z_hat_
+
+
+def procedure(subject_id):
+    """
+
+    """
+    raw, events, cdl_model, z_hat_ = mem.cache(get_csc_results)(
+        subject_id, CDL_PARAMS)
     # events here are only "good" button events
     events_no_first_samp = events.copy()
     events_no_first_samp[:, 0] -= raw.first_samp

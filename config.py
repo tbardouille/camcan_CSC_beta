@@ -2,8 +2,12 @@ import numpy as np
 from pathlib import Path
 
 
+<<<<<<< HEAD
 TEAM = 'cedric'  # 'dal' | 'parietal' | 'cedric'
 N_JOBS = 6
+=======
+TEAM = 'parietal'  # 'dal' | 'parietal' | 'cedric'
+>>>>>>> fa5c8f00378ad749219c880e94c3395513444472
 
 if TEAM == 'parietal':
     # path to CSC results
@@ -15,6 +19,7 @@ if TEAM == 'parietal':
     CT_SPARSE_FILE = DATA_DIR / "camcan-mne/Cam-CAN_ct_sparse.fif"
     PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
     HOME_DIR = Path('.')
+    N_JOBS = 20
 
 elif TEAM == 'dal':
     # path to CSC results
@@ -29,16 +34,21 @@ elif TEAM == 'dal':
         "/home/timb/camcan/camcanMEGcalibrationFiles/ct_sparse.fif")
     PARTICIPANTS_FILE = BIDS_ROOT / "participants.tsv"
     HOME_DIR = Path("/media/NAS/lpower/CSC/")
+    N_JOBS = 6
 
 elif TEAM == 'cedric':
     # path to CSC results
     RESULTS_DIR = Path('./results_csc')
     PARTICIPANTS_FILE = Path("./participants.tsv")
+<<<<<<< HEAD
     BIDS_ROOT = Path()
     SSS_CAL_FILE = Path()
     CT_SPARSE_FILE = Path()
 
 
+=======
+    N_JOBS = 6
+>>>>>>> fa5c8f00378ad749219c880e94c3395513444472
 
 try:
     # list of all Can-CAN subject ids
@@ -68,6 +78,8 @@ def get_paths(subject_id, team=TEAM):
         bemFif = BEM_DIR / subject_id / \
             'bem' / (subject_id + '-meg-bem.fif')
         transFif = TRANS_DIR / ('sub-' + subject_id + '-trans.fif')
+        if not transFif.exists():
+            transFif = Path(str(transFif).replace('trans/', 'trans-halifax/'))
         # XXX
         EPOCH_DIR = ''
         fifFile = ''

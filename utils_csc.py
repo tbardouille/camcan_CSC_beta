@@ -2,7 +2,7 @@
 Utils scripts for utils functions
 """
 # %%
-# %%
+import seaborn as sns
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors
@@ -25,7 +25,7 @@ from alphacsc.utils.convolution import construct_X_multi
 
 from config import CDL_PARAMS, SUBJECT_IDS, get_paths, get_cdl_pickle_name
 from config import BIDS_ROOT, SSS_CAL_FILE, CT_SPARSE_FILE
-from config import RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS
+from config import RESULTS_DIR, PARTICIPANTS_FILE, N_JOBS, DATA_DIR
 
 
 def get_raw(subject_id, ch_type='grad', sfreq=150.):
@@ -191,14 +191,13 @@ def get_subject_dipole(subject_id, cdl_model=None, info=None):
             return
         # load CSC results
         cdl_model, info, _, _ = pickle.load(open(file_name, "rb"))
-    # # compute noise covariance
-    # cov = mne.make_ad_hoc_cov(info)
     # select only grad channels
     meg_indices = mne.pick_types(info, meg='grad')
     info = mne.pick_info(info, meg_indices)
-    evoked = mne.EvokedArray(cdl_model.u_hat_.T, info)
     # compute noise covariance
     cov = mne.make_ad_hoc_cov(info)
+    u_hat_ = cdl_model.u_hat_
+    evoked = mne.EvokedArray(u_hat_.T, info)
     # compute dipole fit
     dip = mne.fit_dipole(evoked, cov, str(bemFif), str(transFif), n_jobs=6,
                          verbose=False)[0]
@@ -341,30 +340,25 @@ def get_atom_df(subject_ids=SUBJECT_IDS, results_dir=RESULTS_DIR, save=True):
     return df
 
 
-def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4, output_dir=RESULTS_DIR):
+def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4,
+                                  exclude_subs=None,
+                                  output_dir=RESULTS_DIR):
     """
 
     Parameters
     ----------
     atom_df : pandas DataFrame
-        each row is an atom, at least the columns 'subject_id', 'atom_id', 'u_hat' 
-        and 'v_hat'    
+        each row is an atom, at least the columns 'subject_id', 'atom_id',
+        'u_hat' and 'v_hat'    
 
     """
 
+    if exclude_subs is not None:
+        atom_df = atom_df[~atom_df['subject_id'].isin(
+            exclude_subs)].reset_index()
+
     # Calculate the correlation coefficient between all atoms
-    # u_vector_list = np.asarray(atom_df['u_hat'].values)
-    # u_coefs = np.corrcoef(u_vector_list, u_vector_list, rowvar=False)[0:10760][0:10760]
     u_coefs = np.corrcoef(np.stack(atom_df['u_hat']))
-
-    # v_vector_list = np.stack(atom_df['v_hat'])
-    # v_coefs = []
-    # for v in v_vector_list:
-    #     for v2 in v_vector_list:
-    #         coef = np.max(ss.correlate(v, v2))
-    #         v_coefs.append(coef)
-    # v_coefs = np.reshape(np.asarray(v_coefs), (10760, 10760))
-
     v_list = np.stack(atom_df['v_hat'])
     v_coefs = np.reshape([np.max(ss.correlate(v1, v2))
                           for v1 in v_list for v2 in v_list],
@@ -417,11 +411,15 @@ def double_correlation_clustering(atom_df, u_thresh=0.4, v_thresh=0.4, output_di
 
     if output_dir is not None:
         # Save atomGroups to dataframe
-        csv_dir = output_dir + \
-            'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atom_groups.csv'
+        csv_dir = output_dir / \
+            ('u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atom_groups.csv')
         atom_groups.to_csv(csv_dir)
 
-    group_summary = None  # XXX
+    group_summary = atom_groups.groupby('group_number')\
+        .agg({'subject_id': 'nunique', 'atom_id': 'count'})\
+        .rename(columns={'subject_id': 'nunique_subject_id',
+                         'atom_id': 'count_atom_id'})\
+        .reset_index()
 
     return atom_groups, group_summary
 
@@ -435,12 +433,14 @@ def single_subject_exclusion(atom_df, u_thresh=0.8, v_thresh=0.8,
     def procedure(subject_id):
 
         atom_groups = double_correlation_clustering(
-            atom_df=atom_df[atom_df['subject_id'] == subject_id],
+            atom_df=atom_df[atom_df['subject_id'] == subject_id].reset_index(),
             u_thresh=u_thresh, v_thresh=v_thresh, output_dir=None)
 
-        new_row = {'subject_id': subject_id, 'exclude': False}
+        new_row = {'subject_id': subject_id,
+                   'exclude': False,
+                   'n_groups': atom_groups['group_number'].nunique()}
 
-        if atom_groups['group_number'].nunique() < n_group_thresh:
+        if new_row['n_groups'] < n_group_thresh:
             new_row['exclude'] = True
 
         return new_row
@@ -484,20 +484,27 @@ def correlation_clustering_atoms(atom_df, threshold=0.4,
                     'CC510043', 'CC621642', 'CC521040', 'CC610052', 'CC520517',
                     'CC610469', 'CC720497', 'CC610292', 'CC620129', 'CC620490']
 
-    atom_df = atom_df[~atom_df['subject_id'].isin(exclude_subs)]
+    atom_df = atom_df[~atom_df['subject_id'].isin(exclude_subs)].reset_index()
     # Calculate the correlation coefficient between all atoms
-    u_vector_list = np.asarray(atom_df['u_hat'].values)
-    v_vector_list = np.asarray(atom_df['v_hat'].values)
+    # u_vector_list = np.asarray(atom_df['u_hat'].values)
+    # v_vector_list = np.asarray(atom_df['v_hat'].values)
 
-    v_coefs = []
-    for v in v_vector_list:
-        for v2 in v_vector_list:
-            coef = np.max(ss.correlate(v, v2))
-            v_coefs.append(coef)
-    v_coefs = np.asarray(v_coefs)
-    v_coefs = np.reshape(v_coefs, (10760, 10760))
+    # v_coefs = []
+    # for v in v_vector_list:
+    #     for v2 in v_vector_list:
+    #         coef = np.max(ss.correlate(v, v2))
+    #         v_coefs.append(coef)
+    # v_coefs = np.asarray(v_coefs)
+    # v_coefs = np.reshape(v_coefs, (10760, 10760))
 
-    u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
+    # u_coefs = np.corrcoef(u_vector_list, u_vector_list)[0:10760][0:10760]
+
+    # Calculate the correlation coefficient between all atoms
+    u_coefs = np.corrcoef(np.stack(atom_df['u_hat']))
+    v_list = np.stack(atom_df['v_hat'])
+    v_coefs = np.reshape([np.max(ss.correlate(v1, v2))
+                          for v1 in v_list for v2 in v_list],
+                         (v_list.shape[0], v_list.shape[0]))
 
     threshold_summary = pd.DataFrame(
         columns=['Threshold', 'Number of Groups', 'Number of Top Groups'])
@@ -515,7 +522,7 @@ def correlation_clustering_atoms(atom_df, threshold=0.4,
         columns=['subject_id', 'atom_id', 'Index', 'Group number'])
 
     for ii, row in atom_df.iterrows():
-        print(row)
+        # print(row)
         subject_id, atom_id = row.subject_id, row.atom_id
 
         max_corr = 0
@@ -588,7 +595,7 @@ def correlation_clustering_atoms(atom_df, threshold=0.4,
         numAtoms_list.append(numAtoms)
 
         groupRows = atomGroups[atomGroups['Group number'] == un]
-        sub_list = np.asarray(groupRows['Subject ID'].tolist())
+        sub_list = np.asarray(groupRows['subject_id'].tolist())
         numSubs = len(np.unique(sub_list))
         numSubs_list.append(numSubs)
 
@@ -616,15 +623,17 @@ def correlation_clustering_atoms(atom_df, threshold=0.4,
     threshold_summary = threshold_summary.append(
         threshold_dict, ignore_index=True)
 
-    # Save group summary dataframe
-    csv_dir = output_dir + \
-        'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_groupSummary.csv'
-    groupSummary.to_csv(csv_dir)
+    if output_dir is not None:
 
-    # Save atomGroups to dataframe
-    csv_dir = output_dir + \
-        'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
-    atomGroups.to_csv(csv_dir)
+        # Save group summary dataframe
+        csv_dir = output_dir + \
+            'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_groupSummary.csv'
+        groupSummary.to_csv(csv_dir)
+
+        # Save atomGroups to dataframe
+        csv_dir = output_dir + \
+            'u_' + str(u_thresh) + '_v_' + str(v_thresh) + '_atomGroups.csv'
+        atomGroups.to_csv(csv_dir)
 
     return groupSummary, atomGroups
 
@@ -779,14 +788,12 @@ def get_df_mean(df, col_label='Group number', cdl_params=CDL_PARAMS,
 
         return new_row
 
-    new_rows = Parallel(n_jobs=n_jobs, verbose=1)(
-        delayed(procedure)(label) for label in set(df[col_label].values))
+    new_rows = Parallel(n_jobs=min(n_jobs, df[col_label].nunique()), verbose=1)(
+        delayed(procedure)(this_label) for this_label in df[col_label].unique())
 
     df_mean = pd.DataFrame()
     for new_row in new_rows:
         df_mean = df_mean.append(new_row, ignore_index=True)
-
-    print(df_mean)
 
     df_mean.rename(columns={col_label: 'label'}, inplace=True)
     df_mean.to_csv(results_dir / 'df_mean_atom.csv')
@@ -828,12 +835,12 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
         file_name = results_dir / subject_id / get_cdl_pickle_name()
         if not file_name.exists():
             print(f"No such file or directory: {file_name}")
-            break
+            continue
 
         # load CSC results
         cdl_model, _, _, _ = pickle.load(open(file_name, "rb"))
 
-        for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, cdl_model.v_hat_)):
+        for kk, (u, v) in enumerate(zip(cdl_model.u_hat_, flip_v(cdl_model.v_hat_))):
             new_row = {**base_row, 'atom_id': int(kk), 'u_hat': u, 'v_hat': v}
             df = df.append(new_row, ignore_index=True)
 
@@ -848,36 +855,108 @@ def complete_existing_df(atomData, results_dir=RESULTS_DIR):
     return atom_df
 
 
-# # all_atoms_info = pd.read_csv('./all_atoms_info.csv')
-# all_atoms_info = pickle.load(open('all_atoms_info.pkl', "rb"))
-# subject_id = 'CC620264'
-# dip = get_subject_dipole(subject_id)  # version mne qui marche 0.23.0
-# # %%
-
-
-# neigh = NearestNeighbors(n_neighbors=2, metric='correlation')
-# nbrs = neigh.fit(X)
-# distances, indices = nbrs.kneighbors(X)
-# distances = np.sort(distances, axis=0)
-# distances = distances[:, 1]
-# plt.plot(distances)
-# p = 90
-# q = int(X.shape[0] * p / 100)
-# plt.vlines(q, 0, 1, linestyles='--', label=f'{p}%')
-# plt.legend()
-# plt.show()
-
-# eps = round(distances[q], 2)
-# print(
-#     f"epsilon choice so that 90% of individuals have their nearest neightbour in less than epsilon: {eps}")
-
-# # %%
-
-# y_pred = DBSCAN(eps=eps, min_samples=2, metric='correlation').fit_predict(X)
-# print(y_pred)
-
 # %%
 
 if __name__ == '__main__':
     atomData = pd.read_csv(RESULTS_DIR / 'atomData.csv')
+    col_to_drop = [col for col in atomData.columns if 'Unnamed' in col]
+    atomData = atomData.drop(columns=col_to_drop)
     all_atoms_info = complete_existing_df(atomData)
+    atom_df = all_atoms_info.copy()
+
+    BEM_DIR = DATA_DIR / "camcan-mne/freesurfer"
+    TRANS_DIR = DATA_DIR / "camcan-mne/trans"
+    TRANS_HALIFAX_DIR == DATA_DIR / "camcan-mne/trans-halifax"
+
+    BEM_FILES = [f.name for f in BEM_DIR.iterdir()]
+    TRANS_FILES = [f.name for f in TRANS_DIR.iterdir()]
+    TRANS_HALIFAX_FILES = [f.name for f in TRANS_HALIFAX_DIR.iterdir()]
+    df_trans = pd.DataFrame()
+    for subject_id in atom_df['subject_id'].unique():
+        epochFif, transFif, bemFif = get_paths(subject_id)
+        new_row = {'subject_id': subject_id,
+                   'bem_in_base': bemFif.name.split('-')[0] in BEM_FILES,
+                   'trans_in_base': transFif.name in TRANS_FILES,
+                   'trans_in_halifax': transFif.name in TRANS_HALIFAX_FILES}
+        df_trans = df_trans.append(new_row, ignore_index=True)
+
+    # %%
+
+    # all_atoms_info = pd.read_csv('./all_atoms_info.csv')
+    all_atoms_info = pickle.load(open('all_atoms_info.pkl', "rb"))
+
+    exclude_subs = ['CC420061', 'CC121397', 'CC420396', 'CC420348', 'CC320850',
+                    'CC410325', 'CC121428', 'CC110182', 'CC420167', 'CC420261',
+                    'CC322186', 'CC220610', 'CC221209', 'CC220506', 'CC110037',
+                    'CC510043', 'CC621642', 'CC521040', 'CC610052', 'CC520517',
+                    'CC610469', 'CC720497', 'CC610292', 'CC620129', 'CC620490']
+
+    atom_groups, group_summuray = double_correlation_clustering(
+        all_atoms_info, u_thresh=0.4, v_thresh=0.4, exclude_subs=exclude_subs,
+        output_dir=None)
+
+    # %%
+    # subject_id = list(set(all_atoms_info['subject_id'].values))[0]
+    subject_id = 'CC110037'
+    data_cols = ['u_hat', 'v_hat']
+    sub_df = all_atoms_info[all_atoms_info['subject_id'] == subject_id]
+    n_sensors = len(all_atoms_info['u_hat'].values[0])
+    n_times_atom = len(all_atoms_info['v_hat'].values[0])
+    X = pd.DataFrame()
+    X[[f'u_{i}' for i in range(n_sensors)]] = pd.DataFrame(
+        sub_df.u_hat.tolist(), index=sub_df.index)
+    # X[[f'v_{i}' for i in range(n_times_atom)]] = pd.DataFrame(
+    #     sub_df.v_hat.tolist(), index=sub_df.index)
+
+    # %%
+
+    neigh = NearestNeighbors(n_neighbors=2, metric='correlation')
+    nbrs = neigh.fit(X)
+    distances, indices = nbrs.kneighbors(X)
+    distances = np.sort(distances, axis=0)
+    distances = distances[:, 1]
+    plt.plot(distances)
+    p = 90
+    q = int(X.shape[0] * p / 100)
+    plt.vlines(q, 0, 1, linestyles='--', label=f'{p}%')
+    plt.legend()
+    plt.show()
+
+    eps = round(distances[q], 2)
+    print(
+        f"epsilon choice so that 90% of individuals have their nearest neightbour in less than epsilon: {eps}")
+
+    # %%
+    atom_df = all_atoms_info.copy()
+    D = compute_distance_matrix(atom_df)
+    print(D.min(), D.max())
+
+    # %%
+    list_esp = np.linspace(0.1, 0.5, 9)
+    list_min_samples = [1, 2, 3]
+
+    def procedure(eps, min_samples):
+
+        y_pred = DBSCAN(eps=eps, min_samples=min_samples,
+                        metric='precomputed').fit_predict(D)
+        row = {'eps': eps, 'min_samples': min_samples,
+               'n_groups': len(np.unique(y_pred))}
+
+        return row
+
+    new_rows = Parallel(n_jobs=N_JOBS, verbose=1)(
+        delayed(procedure)(eps, min_samples)
+        for eps in list_esp for min_samples in list_min_samples)
+
+    df_dbscan = pd.DataFrame()
+    for new_row in new_rows:
+        df_dbscan = df_dbscan.append(new_row, ignore_index=True)
+
+    # %%
+    n_groups = df_dbscan.pivot("eps", "min_samples", "n_groups")
+    ax = sns.heatmap(n_groups, annot=True)
+    ax.set_title('Number of groups obtains with DBScan')
+    ax.set_ylabel(r'$\varepsilon$')
+    ax.set_xlabel(r"min samples")
+    plt.show()
+    # %%

@@ -47,6 +47,10 @@ def compute_dipole_fit(subject_dir):
     fname_bem = BEM_DIR / subject_id / 'bem' / (subject_id + '-meg-bem.fif')
     trans = TRANS_DIR / ('sub-' + subject_id + '-trans.fif')
 
+    if not trans.exists():
+        trans = str(trans).replace('trans/', 'trans-halifax/')
+
+    dip = False
     if fname_bem.exists() and trans.exists():
         if not (subject_dir / 'df_dip_pos.csv').exists():
             # get CDL results
@@ -70,6 +74,8 @@ def compute_dipole_fit(subject_dir):
         print("subject_id:", subject_id)
         print('fname_bem: %s, trans: %s' %
               (fname_bem.exists(), trans.exists()))
+
+    return dip
 
 
 Parallel(n_jobs=N_JOBS, verbose=1)(

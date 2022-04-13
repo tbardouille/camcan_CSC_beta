@@ -16,9 +16,10 @@ from utils_csc import get_raw, run_csc, get_atom_df
 
 mem = Memory('.')
 
+
 def get_csc_results(subject_id, cdl_params):
     """
-    
+
     """
     # get preprocessed raw and events
     raw, events = get_raw(subject_id)
@@ -26,7 +27,7 @@ def get_csc_results(subject_id, cdl_params):
     cdl_model, z_hat_ = mem.cache(run_csc)(
         X=raw.get_data(picks=['meg']), **CDL_PARAMS)
 
-    return  raw, events, cdl_model, z_hat_
+    return raw, events, cdl_model, z_hat_
 
 
 def procedure(subject_id):

@@ -383,38 +383,3 @@ for subject_id in subjects:
 
                 # Save dataframe as a csv file
                 atomsDf.to_csv(dataframe_dir)
-
-    '''
-    ##### #Recreate MEG data for each atom ##### 
-    atom_data = []
-     
-    #Reconstructs MEG data by convolving the v vector (short temporal pattern) with the z (activation) vector and then multiplying by the u vector 
-    #Yields data that is number of channels x number of samples 
-    for atom in range(0,n_atoms):
-        u = cdl_model.u_hat_[atom]
-        v = cdl_model.v_hat_[atom]
-        z = z_hat_[:,atom,:]
-        z = z.flatten() #z is trials x time so flatten to give entire timecourse 
-     
-        conv = np.convolve(v, z, mode='valid')
-        dat = np.multiply.outer(u, conv) #an array of channels x time 
-     
-        #Create a raw object from the atom data 
-        raw_csc.pick_types(meg='grad')
-        raw_atom = mne.io.RawArray(dat, raw_csc.info)
-    
-        epochs = mne.Epochs(raw_atom, events, event_id, metadata=metadata, tmin=tmin, tmax=tmax, baseline=baseline, preload=True, verbose=False)
-
-        #"good" button event - button event is at most one sec after an audiovis event and with at least 3 sec between 2 button events
-        epochs = epochs["event_name == 'button' and audiovis > -1. and button == 0."]
-
-        #Create TFR
-        fmin = 2
-        fmax = 45
-        freqs = np.arange(fmin,fmax)
-        n_cycles = freqs/2.
-        power, itc = mne.time_frequency.tfr_morlet(epochs, freqs=freqs, n_cycles=n_cycles, use_fft=True, return_itc=True, decim=3)
-    
-        #save for plotting later
-        atom_data.append(power)
-    '''

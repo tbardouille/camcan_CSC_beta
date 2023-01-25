@@ -1,5 +1,7 @@
 Convolutional sparse coding (CSC) was applied to the CamCAN dataset to detect repeating spatiotemporal atoms in individual participants. The atoms were then clustered across participants to form groups of highly similar atoms. Age-related trends in atom characteristics were then investigated within clusters. 
 
+When using this code, please cite https://doi.org/10.1016/j.neuroimage.2022.119809
+
 Follow the steps below to complete the CSC + clustering process:
 
 1. Run ‘run_csc_parallel.py’:
